@@ -1,0 +1,12 @@
+{
+  "name": "taleforge-ai",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:start": "cd backend && npm start",
+    "backend:check": "cd backend && npm run check",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview"
+  }
+}

@@ -1,0 +1,147 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #edb1ff;
+  --color-primary-container: #9d50bb;
+  --color-on-primary: #520070;
+  --color-on-primary-container: #fff3fd;
+  
+  --color-secondary: #dcfdff;
+  --color-secondary-fixed: #6ff6ff;
+  --color-secondary-fixed-dim: #00dce6;
+  --color-on-secondary-fixed: #002022;
+  
+  --color-tertiary: #d6baff;
+  --color-tertiary-container: #835dc0;
+  --color-on-tertiary: #40147a;
+  
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  
+  --color-surface: #131313;
+  --color-surface-dim: #131313;
+  --color-surface-container-lowest: #0e0e0e;
+  --color-surface-container-low: #1c1b1b;
+  --color-surface-container: #201f1f;
+  --color-surface-container-high: #2a2a2a;
+  --color-surface-variant: #353534;
+  
+  --color-on-surface: #e5e2e1;
+  --color-on-surface-variant: #d1c2d2;
+  --color-background: #131313;
+  --color-on-background: #e5e2e1;
+
+  /* TaleForge specific colors */
+  --color-tf-bg: #050505;
+  --color-tf-surface: #0a0e17;
+  --color-tf-primary: #edb1ff;
+  --color-tf-primary-dark: #9d50bb;
+  --color-tf-cyan: #00f1fd;
+  --color-tf-error: #ffb4ab;
+
+  --font-sora: "Sora", sans-serif;
+  --font-inter: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Semantic Typography Mapping */
+  --font-headline: var(--font-sora);
+  --font-display: var(--font-sora);
+  --font-body: var(--font-inter);
+  --font-label: var(--font-mono);
+  
+  --font-headline-md: "Sora", sans-serif;
+  --font-headline-lg: "Sora", sans-serif;
+  --font-display-lg: "Sora", sans-serif;
+  --font-body-lg: "Inter", sans-serif;
+  --font-body-md: "Inter", sans-serif;
+  --font-label-md: "JetBrains Mono", monospace;
+  --font-label-sm: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#050505] text-on-surface font-body overflow-x-hidden antialiased;
+    min-height: max(884px, 100dvh);
+  }
+}
+
+::selection {
+  @apply bg-primary/30;
+}
+
+/* Custom Utilities applied from the design */
+@layer utilities {
+  .glass-panel {
+    @apply bg-[#131313b3] backdrop-blur-[20px] border border-white/10;
+  }
+  
+  .glass-panel-alt {
+    background: rgba(10, 14, 23, 0.7);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .glass-card-hover {
+    @apply hover:border-tf-primary/40 hover:bg-tf-primary/5 transition-all duration-300;
+  }
+
+  .neon-glow {
+    @apply shadow-[0_0_30px_rgba(157,80,187,0.25)] border-tf-primary border;
+  }
+  
+  .hero-glow {
+    background: radial-gradient(circle at 50% 50%, rgba(157, 80, 187, 0.15) 0%, rgba(5, 5, 5, 0) 70%);
+  }
+  
+  .grid-blueprint {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .grid-lines {
+    background-image: 
+      linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  
+  .ai-shimmer {
+    background: linear-gradient(90deg, #edb1ff, #6ff6ff, #edb1ff);
+    background-size: 200% auto;
+    animation: shimmer 4s linear infinite;
+  }
+
+  .node-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .ai-pulse {
+    box-shadow: 0 0 15px rgba(0, 241, 253, 0.4);
+    animation: pulse 2s infinite;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .5; transform: scale(1.1); }
+}
+
+@keyframes float-node {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 0.6; }
+  80% { opacity: 0.6; }
+  100% { transform: translateY(-100px); opacity: 0; }
+}
