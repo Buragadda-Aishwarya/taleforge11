@@ -18,6 +18,7 @@ const developmentOrigins = new Set([
   'http://127.0.0.1:5173',
 ]);
 
+
 export const corsOptions = {
   origin(origin, callback) {
     if (allowedOrigins === '*') {

@@ -38,11 +38,11 @@ export default function TemporalConflictTable({ data, className }) {
               </td>
               <td className="px-6 py-4 text-center">
                 <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[10px] font-bold">
-                  YES
+                  {row.detectedContradiction ? 'YES' : 'NO'}
                 </span>
               </td>
               <td className="px-6 py-4 text-center">
-                {row.expectedResult === row.detectedResult ? (
+                {row.passed ? (
                   <span className="inline-flex items-center gap-1.5 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
                     <CheckCircle2 className="w-4 h-4" />
                     Success

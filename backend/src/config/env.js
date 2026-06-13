@@ -7,6 +7,14 @@ const toNumber = (value, fallback) => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const normalizeMistralModel = (value) => {
+  if (!value || value === 'mistral-7b-instruct') {
+    return 'mistral-large-latest';
+  }
+
+  return value;
+};
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: toNumber(process.env.PORT, 5000),
@@ -20,6 +28,9 @@ export const env = {
   groqModel: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
   openaiApiKey: process.env.OPENAI_API_KEY,
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  mistralApiKey: process.env.MISTRAL_API_KEY,
+  mistralModel: normalizeMistralModel(process.env.MISTRAL_MODEL),
+  sceneProvider: process.env.SCENE_PROVIDER || 'openai',
 };
 
 export const isProduction = env.nodeEnv === 'production';

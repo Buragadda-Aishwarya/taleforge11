@@ -80,6 +80,7 @@ ${retrievedFacts.map((fact, index) => `${index + 1}. ${fact}`).join('\n')}
 const runLocalContinuityCheck = ({ scene, retrievedFacts }) => {
   const normalizedScene = scene.toLowerCase();
   const swimFact = retrievedFacts.find((fact) => /cannot swim/i.test(fact));
+  const destroyedFact = retrievedFacts.find((fact) => /\b(?:was|is)\s+destroyed\b/i.test(fact));
 
   if (swimFact && /\bswim|swims|swimming|swam\b/i.test(normalizedScene)) {
     return {
@@ -90,12 +91,50 @@ const runLocalContinuityCheck = ({ scene, retrievedFacts }) => {
     };
   }
 
+  if (destroyedFact) {
+    const destroyedEntity = destroyedFact
+      .replace(/\b(?:was|is)\s+destroyed\b.*$/i, '')
+      .trim();
+
+    if (
+      destroyedEntity &&
+      normalizedScene.includes(destroyedEntity.toLowerCase())
+    ) {
+      return {
+        contradiction: true,
+        confidence: 92,
+        type: 'Lore Violation',
+        reason: destroyedFact.replace(/\.$/, ''),
+      };
+    }
+  }
+
   return {
     contradiction: false,
     confidence: 75,
     type: 'None',
     reason: '',
   };
+};
+
+const applyConsistencyOverrides = ({ scene, retrievedFacts, analysis }) => {
+  const normalizedScene = scene.toLowerCase();
+  const magicAversionFact = retrievedFacts.find((fact) => /\bhates?\s+magic\b|\bfears?\s+magic\b|\bavoids?\s+magic\b/i.test(fact));
+
+  if (
+    magicAversionFact &&
+    /\b(refuses?|rejects?|avoids?|declines?|will not|won't|does not|doesn't)\b/i.test(normalizedScene) &&
+    /\bmagic|enchanted|spell|sorcery|wizard|witch|tower\b/i.test(normalizedScene)
+  ) {
+    return {
+      contradiction: false,
+      confidence: Math.max(Number(analysis.confidence) || 0, 91),
+      type: 'None',
+      reason: 'Scene behavior is consistent with the character avoiding magic.',
+    };
+  }
+
+  return analysis;
 };
 
 export const runContinuityAgent = async ({ scene, retrievedFacts }) => {
@@ -148,18 +187,28 @@ export const runContinuityAgent = async ({ scene, retrievedFacts }) => {
     const parsed = parseAgentJson(content);
     const confidence = Number(parsed.confidence);
 
-    return {
+    const normalizedAnalysis = {
       contradiction: Boolean(parsed.contradiction),
       confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0,
       type: typeof parsed.type === 'string' && parsed.type.trim() ? parsed.type.trim() : 'None',
       reason: typeof parsed.reason === 'string' ? parsed.reason.trim().replace(/\.$/, '') : '',
     };
+
+    return applyConsistencyOverrides({
+      scene: scene.trim(),
+      retrievedFacts: normalizedFacts,
+      analysis: normalizedAnalysis,
+    });
   } catch (error) {
     console.warn('Groq continuity check failed. Falling back to local continuity check.');
     console.warn(error.message || error);
-    return runLocalContinuityCheck({
+    return applyConsistencyOverrides({
       scene: scene.trim(),
       retrievedFacts: normalizedFacts,
+      analysis: runLocalContinuityCheck({
+        scene: scene.trim(),
+        retrievedFacts: normalizedFacts,
+      }),
     });
   }
 };

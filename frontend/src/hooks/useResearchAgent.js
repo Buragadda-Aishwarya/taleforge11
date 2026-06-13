@@ -5,51 +5,74 @@ export function useResearchAgent(initialQuery) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [activity, setActivity] = useState([]);
+
+  const pushActivity = (label, status = 'completed') => {
+    setActivity((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${prev.length}`,
+        label,
+        status,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+  };
 
   const analyzeQuery = async (newQuery) => {
     if (!newQuery.trim()) return;
     setIsLoading(true);
     setError(null);
+    setActivity([]);
 
     try {
+      pushActivity('Research Started', 'active');
+      pushActivity('Searching Sources', 'active');
       const research = await queryResearch(newQuery);
+      pushActivity('Generating Assets');
+      pushActivity('Creating Context Nodes');
       setData({
         id: `research-${Date.now()}`,
         query: research.query || newQuery,
         rawResearch: research,
         summary: {
           title: research.query || newQuery,
-          paragraph: research.summary,
+          paragraph: research.executiveSummary || research.summary,
           keyFindings: research.keyFindings || [],
         },
-        timeline: [],
+        technologies: research.technologies || [],
+        challenges: research.challenges || [],
+        opportunities: research.opportunities || [],
+        timeline: (research.historicalEvolution || []).map((item, index) => ({
+          year: item.period || `Phase ${index + 1}`,
+          label: item.label || item.period || `Stage ${index + 1}`,
+          subLabel: item.description || '',
+          isCore: index < 2,
+        })),
         impact: {
           character: {
-            title: 'Character Concepts',
-            description: (research.characterIdeas || []).join(' '),
+            title: 'Character Concept',
+            description: research.storyAssets?.character?.description || '',
           },
           worldRule: {
             title: 'World Rules',
-            description: (research.worldBuildingIdeas || []).join(' '),
+            description: research.storyAssets?.worldRule?.rule || '',
           },
-          storyIdeas: research.storyIdeas || [],
-          characterIdeas: research.characterIdeas || [],
-          worldBuildingIdeas: research.worldBuildingIdeas || [],
+          storyOpportunities: research.storyOpportunities || research.storyIdeas || [],
+          storyAssets: research.storyAssets || {},
+          aiIdeationDrafts: research.aiIdeationDrafts || {},
         },
-        sources: [
-          { name: 'Gemini Research Agent', institution: 'TaleForge AI', isWeb: false },
-        ],
-        contextModes: [
-          ...(research.keyFindings || []),
-          ...(research.storyIdeas || []),
-        ].slice(0, 8),
+        sources: research.sources || [],
+        contextModes: research.contextualNodes || [],
       });
+      pushActivity('Completed');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Research failed');
+      pushActivity('Research Failed', 'failed');
     } finally {
       setIsLoading(false);
     }
   };
 
-  return { data, isLoading, error, analyzeQuery };
+  return { data, isLoading, error, activity, analyzeQuery, pushActivity };
 }

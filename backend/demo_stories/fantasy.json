@@ -1,0 +1,28 @@
+{
+  "id": "fantasy",
+  "genre": "Fantasy",
+  "title": "The Glass Kingdom",
+  "content": "Aria lives in the Glass Kingdom, a city of crystal bridges built above a silver sea. Aria cannot swim and avoids the harbor whenever storms rise. Kiran mentors Aria in court diplomacy, though Aria hates magic and refuses enchanted bargains. The Moon Fragment belongs to Aria and opens only under starlight. The Glass Kingdom survives because every bridge must be sung awake at dawn.",
+  "knownCharacters": [
+    "Aria",
+    "Kiran"
+  ],
+  "knownRules": [
+    "Aria cannot swim.",
+    "Aria hates magic.",
+    "The Moon Fragment belongs to Aria.",
+    "Every bridge in the Glass Kingdom must be sung awake at dawn."
+  ],
+  "knownContradictions": [
+    {
+      "fact": "Aria cannot swim.",
+      "scene": "Aria swims across the silver sea to reach the moonlit tower.",
+      "expected": "Contradiction"
+    },
+    {
+      "fact": "Aria hates magic.",
+      "scene": "Aria happily accepts an enchanted bargain from the harbor mage.",
+      "expected": "Character Trait Violation"
+    }
+  ]
+}

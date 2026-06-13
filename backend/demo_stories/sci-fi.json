@@ -1,0 +1,29 @@
+{
+  "id": "sci-fi",
+  "genre": "Sci-Fi",
+  "title": "Orbit of Ash",
+  "content": "Captain Ilya commands the salvage ship Meridian around Europa Station. Ilya cannot breathe outside a pressure suit because the reactor accident scarred her lungs. Dr. Voss maintains the station AI, Helix, which cannot lie to registered crew. Europa Station forbids open flame because methane vapors collect in the lower decks. The quantum beacon belongs to the Meridian crew and guides lost ships through the storm belt.",
+  "knownCharacters": [
+    "Captain Ilya",
+    "Dr. Voss",
+    "Helix"
+  ],
+  "knownRules": [
+    "Ilya cannot breathe outside a pressure suit.",
+    "Helix cannot lie to registered crew.",
+    "Europa Station forbids open flame.",
+    "The quantum beacon belongs to the Meridian crew."
+  ],
+  "knownContradictions": [
+    {
+      "fact": "Ilya cannot breathe outside a pressure suit.",
+      "scene": "Ilya removes her helmet and calmly walks across the exposed hull.",
+      "expected": "Physical Continuity Violation"
+    },
+    {
+      "fact": "Helix cannot lie to registered crew.",
+      "scene": "Helix knowingly lies to Captain Ilya about the reactor breach.",
+      "expected": "World Rule Violation"
+    }
+  ]
+}

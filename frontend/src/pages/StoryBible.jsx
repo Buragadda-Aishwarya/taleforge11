@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MapPin, Plus, Scale, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
+import { Calendar, MapPin, Plus, Scale, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
 import { DomainTabs } from '@/components/DomainTabs';
 import { NeuralFeedCard } from '@/components/NeuralFeedCard';
 import { RelationshipGraph } from '@/components/RelationshipGraph';
@@ -90,6 +90,7 @@ export default function StoryBible() {
   const characters = storyBible?.characters || [];
   const locations = storyBible?.locations || [];
   const worldRules = storyBible?.worldRules || [];
+  const timelines = storyBible?.timelines || [];
   const hasGeneratedBible = Boolean(storyBible);
 
   const feed = useMemo(() => {
@@ -102,7 +103,7 @@ export default function StoryBible() {
         id: 'generated',
         type: 'link',
         title: 'Story Bible Generated',
-        description: `Gemini extracted ${characters.length} characters, ${locations.length} locations, and ${worldRules.length} world rules.`,
+        description: `Gemini extracted ${characters.length} characters, ${locations.length} locations, ${timelines.length} timeline events, and ${worldRules.length} world rules.`,
         timestamp: latestRecord.generatedAt ? new Date(latestRecord.generatedAt).toLocaleString() : 'Just now',
         status: 'secondary',
       },
@@ -115,7 +116,7 @@ export default function StoryBible() {
         status: 'primary',
       },
     ];
-  }, [characters.length, hasGeneratedBible, latestRecord?.generatedAt, locations.length, worldRules.length]);
+  }, [characters.length, hasGeneratedBible, latestRecord?.generatedAt, locations.length, timelines.length, worldRules.length]);
 
   const graphData = useMemo(() => toGeneratedGraph(characters), [characters]);
   const characterPreview = useMemo(
@@ -189,7 +190,7 @@ export default function StoryBible() {
             </div>
 
             {hasGeneratedBible && (
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 lg:gap-8">
                 <EntityList
                   title="Characters"
                   icon={Users}
@@ -214,6 +215,20 @@ export default function StoryBible() {
                       <h3 className="font-sora text-base font-semibold text-on-surface">{location.name || 'Unnamed Location'}</h3>
                       <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-secondary">{location.significance || 'Significance pending'}</p>
                       <p className="mt-3 font-inter text-sm leading-relaxed text-on-surface-variant">{location.description || 'No description provided.'}</p>
+                    </>
+                  )}
+                />
+
+                <EntityList
+                  title="Timeline"
+                  icon={Calendar}
+                  items={timelines}
+                  emptyLabel="No timeline events were extracted."
+                  renderItem={(timeline) => (
+                    <>
+                      <h3 className="font-sora text-base font-semibold text-on-surface">{timeline.event || 'Unnamed Event'}</h3>
+                      <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-secondary">Event {timeline.order || 'Pending'}</p>
+                      <p className="mt-3 font-inter text-sm leading-relaxed text-on-surface-variant">{timeline.evidence || 'No evidence provided.'}</p>
                     </>
                   )}
                 />

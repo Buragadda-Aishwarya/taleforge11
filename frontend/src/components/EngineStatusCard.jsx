@@ -1,6 +1,23 @@
 import { Brain, Network } from 'lucide-react';
 
-export default function EngineStatusCard() {
+const formatDuration = (duration) => {
+  if (typeof duration !== 'number') return 'Waiting';
+  return duration >= 1000 ? `${(duration / 1000).toFixed(1)}s` : `${Math.round(duration)}ms`;
+};
+
+export default function EngineStatusCard({ latestLog, summary, loading }) {
+  const latestTitle = latestLog
+    ? latestLog.action
+    : loading
+      ? 'Loading agent activity'
+      : 'No agent activity yet';
+  const latestDescription = latestLog
+    ? `${latestLog.agentName} executed through ${latestLog.metadata?.provider || 'the router'} in ${formatDuration(latestLog.duration)}.`
+    : 'Run research, continuity, scene generation, or the recruiter demo to populate this dashboard.';
+  const completed = summary?.completedOperations || 0;
+  const total = summary?.totalOperations || 0;
+  const progress = total ? Math.round((completed / total) * 100) : 0;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -16,13 +33,13 @@ export default function EngineStatusCard() {
         <div className="flex flex-col gap-4 relative z-10">
           <div className="flex items-center justify-between mb-2">
             <span className="font-mono text-xs text-zinc-400 tracking-widest">CURRENT TASK</span>
-            <span className="font-mono text-xs text-purple-300 tracking-widest">84% COMPLETE</span>
+            <span className="font-mono text-xs text-purple-300 tracking-widest">{progress}% COMPLETE</span>
           </div>
-          <h3 className="font-display text-xl text-zinc-100 font-medium leading-tight">World-Building Synthesis</h3>
-          <p className="text-zinc-400 font-sans text-sm">Mapping thematic resonance across the third act conflict nodes.</p>
+          <h3 className="font-display text-xl text-zinc-100 font-medium leading-tight">{latestTitle}</h3>
+          <p className="text-zinc-400 font-sans text-sm">{latestDescription}</p>
           
           <div className="w-full bg-zinc-900/80 h-1.5 rounded-full overflow-hidden mt-2 border border-zinc-800">
-            <div className="h-full bg-gradient-to-r from-purple-600 to-purple-400 w-[84%] relative">
+            <div className="h-full bg-gradient-to-r from-purple-600 to-purple-400 relative" style={{ width: `${Math.max(progress, latestLog ? 12 : 0)}%` }}>
                <div className="absolute inset-0 bg-white/20 w-full animate-pulse"></div>
             </div>
           </div>
@@ -36,7 +53,7 @@ export default function EngineStatusCard() {
                 <Network className="w-4 h-4 text-cyan-300" />
               </div>
             </div>
-            <span className="font-mono text-xs text-zinc-500 ml-2">2 Agents Collaborating</span>
+            <span className="font-mono text-xs text-zinc-500 ml-2">{total} Agent Operations</span>
           </div>
         </div>
         

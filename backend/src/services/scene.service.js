@@ -1,56 +1,71 @@
 import { query } from '../config/db.js';
+import {
+  getLatestChapter,
+  insertScenePath,
+  updateSceneExpansion,
+} from '../repositories/scene.repository.js';
 import { searchMemory, searchRelevantContext } from './chroma.service.js';
-import { generateScenePaths } from './openai/sceneGeneration.service.js';
+import { runContinuityAgent } from './continuityAgent.js';
+import {
+  expandScenePath,
+  generateScenePaths,
+} from './sceneGeneration.service.js';
 
-const emptyStoryBible = {
-  story: null,
-  characters: [],
-  locations: [],
-  worldRules: [],
-};
-
-const getStoryBible = async (storyId) => {
+const loadStoryBible = async (storyId) => {
   const storyResult = await query(
     'SELECT id, title, content, created_at, updated_at FROM stories WHERE id = $1',
     [storyId]
   );
+  const story = storyResult.rows[0];
 
-  if (!storyResult.rows[0]) {
+  if (!story) {
     const error = new Error('Story not found.');
     error.statusCode = 404;
     throw error;
   }
 
-  const [charactersResult, locationsResult, worldRulesResult] = await Promise.all([
+  const [
+    characters,
+    locations,
+    worldRules,
+    relationships,
+    researchEntries,
+  ] = await Promise.all([
+    query('SELECT id, name, description FROM characters WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, name, description FROM locations WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, rule, category FROM world_rules WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
+    query('SELECT id, source, target, relation FROM relationships WHERE story_id = $1 ORDER BY id ASC', [storyId]),
     query(
-      'SELECT id, name, description FROM characters WHERE story_id = $1 ORDER BY id ASC',
-      [storyId]
-    ),
-    query(
-      'SELECT id, name, description FROM locations WHERE story_id = $1 ORDER BY id ASC',
-      [storyId]
-    ),
-    query(
-      'SELECT id, rule, category FROM world_rules WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC',
+      `
+        SELECT id, query, executive_summary, summary, key_findings, technologies,
+          challenges, opportunities, historical_evolution, story_opportunities
+        FROM research_entries
+        WHERE story_id = $1 OR story_id IS NULL
+        ORDER BY id DESC
+        LIMIT 12
+      `,
       [storyId]
     ),
   ]);
 
   return {
-    story: storyResult.rows[0],
-    characters: charactersResult.rows,
-    locations: locationsResult.rows,
-    worldRules: worldRulesResult.rows,
+    story,
+    characters: characters.rows,
+    locations: locations.rows,
+    worldRules: worldRules.rows,
+    relationships: relationships.rows,
+    researchEntries: researchEntries.rows,
   };
 };
 
-const retrieveSceneContext = async (storyBible) => {
+const retrieveSceneContext = async ({ storyBible, selectedPath = '' }) => {
   const queries = [
-    `character facts ${storyBible.story?.title || ''}`,
-    `world rules ${storyBible.story?.title || ''}`,
-    `previous chapters ${storyBible.story?.title || ''}`,
-    `research entries ${storyBible.story?.title || ''}`,
-  ];
+    `character facts ${storyBible.story.title}`,
+    `world rules relationships ${storyBible.story.title}`,
+    `research entries ${storyBible.researchEntries.map((entry) => entry.query).join(' ')}`,
+    `previous chapters ${storyBible.story.title}`,
+    selectedPath,
+  ].filter(Boolean);
   const results = [];
 
   for (const contextQuery of queries) {
@@ -70,7 +85,9 @@ const retrieveSceneContext = async (storyBible) => {
   }
 
   try {
-    const storyResults = await searchRelevantContext(storyBible.story?.content || storyBible.story?.title || '');
+    const storyResults = await searchRelevantContext(
+      `${storyBible.story.content} ${selectedPath}`.trim()
+    );
     results.push(
       ...storyResults.map((item) => ({
         ...item,
@@ -87,36 +104,151 @@ const retrieveSceneContext = async (storyBible) => {
   return results.slice(0, 20);
 };
 
-export const generateSceneForStory = async (storyId) => {
+const buildContinuityFacts = ({ storyBible, retrievedMemory }) => [
+  ...storyBible.characters.map((character) => `${character.name}: ${character.description || ''}`),
+  ...storyBible.locations.map((location) => `${location.name}: ${location.description || ''}`),
+  ...storyBible.worldRules.map((rule) => rule.rule),
+  ...storyBible.relationships.map((relationship) => `${relationship.source} ${relationship.relation} ${relationship.target}`),
+  ...storyBible.researchEntries.flatMap((entry) => [
+    entry.executive_summary || entry.summary,
+    ...(entry.key_findings || []),
+    ...(entry.technologies || []),
+    ...(entry.story_opportunities || []),
+  ]),
+  ...retrievedMemory.map((item) => item.text || item.content),
+].filter((fact) => typeof fact === 'string' && fact.trim());
+
+const validateSceneWithRetries = async ({
+  storyBible,
+  researchNotes,
+  retrievedMemory,
+  latestChapter,
+  selectedPath,
+  provider,
+}) => {
+  let previousAttempt = '';
+  let continuityFeedback = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const generated = await expandScenePath({
+      provider,
+      storyBible,
+      researchNotes,
+      retrievedMemory,
+      latestChapter,
+      selectedPath,
+      previousAttempt,
+      continuityFeedback,
+    });
+    const retrievedFacts = buildContinuityFacts({ storyBible, retrievedMemory });
+    const analysis = await runContinuityAgent({
+      scene: generated.scene,
+      retrievedFacts,
+    });
+
+    if (!analysis.contradiction) {
+      return {
+        ...generated,
+        validation: analysis,
+        attempts: attempt + 1,
+      };
+    }
+
+    previousAttempt = generated.scene;
+    continuityFeedback = analysis;
+  }
+
+  const error = new Error('Unable to generate a continuity-safe scene after 2 retries.');
+  error.statusCode = 409;
+  error.details = continuityFeedback;
+  throw error;
+};
+
+export const generateSceneForStory = async (storyId, provider = 'openai') => {
   if (!storyId) {
     const error = new Error('Story ID is required.');
     error.statusCode = 400;
     throw error;
   }
 
-  let storyBible = emptyStoryBible;
+  const storyBible = await loadStoryBible(storyId);
+  const latestChapter = await getLatestChapter(storyId);
+  const retrievedMemory = await retrieveSceneContext({ storyBible });
+  const sceneGeneration = await generateScenePaths({
+    provider,
+    storyBible,
+    researchNotes: storyBible.researchEntries,
+    retrievedMemory,
+    latestChapter,
+  });
+  const savedPaths = [];
 
-  try {
-    storyBible = await getStoryBible(storyId);
-  } catch (error) {
-    if (error.statusCode === 404) {
-      throw error;
-    }
-
-    console.warn('PostgreSQL story bible retrieval failed. Using empty Story Bible.');
-    console.warn(error.message || error);
+  for (const path of sceneGeneration.paths) {
+    savedPaths.push(await insertScenePath({
+      storyId,
+      pathTitle: path.title,
+      pathSummary: path.summary,
+      impact: path.impact,
+      riskLevel: path.riskLevel,
+      narrativeScore: path.narrativeScore,
+    }));
   }
 
-  const retrievedContext = await retrieveSceneContext(storyBible);
-  const sceneGeneration = await generateScenePaths({
+  return {
+    storyId,
+    provider: sceneGeneration.provider,
     storyBible,
-    retrievedContext,
+    researchNotes: storyBible.researchEntries,
+    retrievedMemory,
+    latestChapter,
+    paths: sceneGeneration.paths,
+    savedPaths,
+  };
+};
+
+export const expandSceneForStory = async ({ storyId, selectedPath, provider = 'openai' }) => {
+  if (!storyId) {
+    const error = new Error('Story ID is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (typeof selectedPath !== 'string' || selectedPath.trim().length === 0) {
+    const error = new Error('Selected path is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const storyBible = await loadStoryBible(storyId);
+  const latestChapter = await getLatestChapter(storyId);
+  const retrievedMemory = await retrieveSceneContext({
+    storyBible,
+    selectedPath,
+  });
+  const validated = await validateSceneWithRetries({
+    provider,
+    storyBible,
+    researchNotes: storyBible.researchEntries,
+    retrievedMemory,
+    latestChapter,
+    selectedPath: selectedPath.trim(),
+  });
+  const savedScene = await updateSceneExpansion({
+    storyId,
+    selectedPath: selectedPath.trim(),
+    generatedScene: validated.scene,
+    confidence: validated.confidence,
+    validationStatus: 'validated',
   });
 
   return {
     storyId,
-    storyBible,
-    retrievedContext,
-    ...sceneGeneration,
+    provider: validated.provider,
+    selectedPath: selectedPath.trim(),
+    scene: validated.scene,
+    confidence: validated.confidence,
+    validation: validated.validation,
+    attempts: validated.attempts,
+    savedScene,
   };
 };

@@ -3,18 +3,20 @@ import {
   Cpu, Workflow, Sparkles, Zap, Layers, Server
 } from 'lucide-react';
 
-export default function ActivityLogCard({ log, isFirst }) {
+export default function ActivityLogCard({ log, isFirst, onDelete }) {
   const getSubtextStyles = (status) => {
-    switch(status) {
-      case "In Progress": return "text-purple-400";
-      case "Completed": return "text-cyan-400";
-      case "Failed": return "text-red-400";
+    const normalizedStatus = status?.toLowerCase();
+    switch(normalizedStatus) {
+      case "in progress": return "text-purple-400";
+      case "completed": return "text-cyan-400";
+      case "failed": return "text-red-400";
       default: return "text-zinc-400";
     }
   };
 
   const getStatusIcon = (status) => {
-    if (status === "In Progress") {
+    const normalizedStatus = status?.toLowerCase();
+    if (normalizedStatus === "in progress") {
       return (
         <div className="w-6 h-6 rounded-full bg-zinc-950 border-2 border-purple-500/50 flex items-center justify-center shadow-[0_0_10px_rgba(168,85,247,0.3)] shrink-0 z-10 relative">
           <span className="w-2 h-2 rounded-full bg-purple-400 ai-pulse"></span>
@@ -22,18 +24,20 @@ export default function ActivityLogCard({ log, isFirst }) {
       );
     }
     return (
-      <div className={`w-6 h-6 rounded-full bg-zinc-950 border-2 flex items-center justify-center shrink-0 z-10 relative ${status === 'Completed' ? 'border-cyan-500/50' : 'border-zinc-700'}`}>
-        <CheckCircle2 className={`w-3.5 h-3.5 ${status === 'Completed' ? 'text-cyan-400' : 'text-zinc-500'}`} />
+      <div className={`w-6 h-6 rounded-full bg-zinc-950 border-2 flex items-center justify-center shrink-0 z-10 relative ${normalizedStatus === 'completed' ? 'border-cyan-500/50' : 'border-zinc-700'}`}>
+        <CheckCircle2 className={`w-3.5 h-3.5 ${normalizedStatus === 'completed' ? 'text-cyan-400' : 'text-zinc-500'}`} />
       </div>
     );
   };
 
   const getAgentIcon = (type) => {
     switch (type) {
+      case "Research Agent":
       case "Librarian Agent": return <Search className="w-5 h-5 text-purple-400/70" />;
       case "Continuity Agent": return <CheckCircle2 className="w-5 h-5 text-cyan-400/70" />;
       case "Story Bible Agent": return <BookOpen className="w-5 h-5 text-purple-300/70" />;
       case "Memory Agent": return <Upload className="w-5 h-5 text-zinc-400" />;
+      case "Scene Generation Agent":
       case "Scene Generator Agent": return <Cpu className="w-5 h-5 text-cyan-400/70" />;
       default: return <Database className="w-5 h-5 text-zinc-400" />;
     }
@@ -59,28 +63,28 @@ export default function ActivityLogCard({ log, isFirst }) {
       
       <div className="flex items-center gap-3 mb-3">
         <span className="font-mono text-[10px] text-zinc-400 bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800 tracking-wider">
-          {log.timestamp}
+          {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
         <span className={`font-mono text-[10px] uppercase tracking-widest ${getSubtextStyles(log.status)}`}>
-          {log.status}
+          {log.status === 'completed' ? 'Completed' : log.status === 'failed' ? 'Failed' : log.status}
         </span>
       </div>
 
       <div className={`glass-panel rounded-2xl p-5 md:p-6 transition-all duration-300 hover:bg-zinc-900/60 ${isFirst ? 'border-purple-500/30 shadow-[0_4px_20px_rgba(168,85,247,0.1)]' : 'border-white/5 opacity-80 hover:opacity-100 hover:border-purple-500/20'}`}>
         <div className="flex justify-between items-start gap-4">
           <div>
-            <h4 className="font-display text-lg text-zinc-100 font-medium tracking-tight mb-1">{log.title}</h4>
-            <p className="text-zinc-400 font-sans text-sm leading-relaxed">{log.description}</p>
+            <h4 className="font-display text-lg text-zinc-100 font-medium tracking-tight mb-1">{log.agentName}</h4>
+            <p className="text-zinc-400 font-sans text-sm leading-relaxed">{log.action}</p>
           </div>
           <div className="shrink-0 p-2 rounded-full bg-zinc-900/50 border border-white/5">
-            {getAgentIcon(log.agentType)}
+            {getAgentIcon(log.agentName)}
           </div>
         </div>
 
         {/* Tech Stack & Metrics Footer */}
         <div className="mt-4 pt-4 border-t border-white/5 flex flex-wrap gap-2 items-center">
           <div className="px-2 py-1 bg-zinc-950/80 border border-white/5 rounded-md font-mono text-[10px] uppercase tracking-wider">
-            {getProviderBadge(log.provider)}
+            {getProviderBadge(log.metadata?.provider)}
           </div>
           {log.metrics?.model && (
             <div className="px-2 py-1 bg-zinc-950/80 border border-white/5 rounded-md font-mono text-[10px] uppercase tracking-wider text-zinc-400 flex items-center">
@@ -92,6 +96,9 @@ export default function ActivityLogCard({ log, isFirst }) {
               Lat: {log.metrics.latency}
             </div>
           )}
+          <div className="px-2 py-1 bg-zinc-950/80 border border-white/5 rounded-md font-mono text-[10px] uppercase tracking-wider text-zinc-400 flex items-center">
+            Duration: {log.duration >= 1000 ? `${(log.duration / 1000).toFixed(1)}s` : `${Math.round(log.duration)}ms`}
+          </div>
           {log.metrics?.tokens && (
             <div className="px-2 py-1 bg-zinc-950/80 border border-white/5 rounded-md font-mono text-[10px] uppercase tracking-wider text-zinc-400 flex items-center">
               Tokens: {log.metrics.tokens}
@@ -103,7 +110,7 @@ export default function ActivityLogCard({ log, isFirst }) {
           <div className="mt-3 bg-zinc-950/50 p-3 rounded-lg border border-white/5 font-mono text-xs text-zinc-400 flex flex-col gap-2">
             {log.queryDetails && (
               <div className="flex items-start gap-2">
-                <LinkIcon className="w-3.5 h-3.5 text-purple-400 mt-0.5 shrink-0" />
+                <Link className="w-3.5 h-3.5 text-purple-400 mt-0.5 shrink-0" />
                 <span className="leading-relaxed">{log.queryDetails}</span>
               </div>
             )}
@@ -116,6 +123,16 @@ export default function ActivityLogCard({ log, isFirst }) {
           </div>
         )}
       </div>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="absolute top-3 right-3 text-zinc-400 hover:text-red-400"
+          aria-label="Delete log entry"
+        >
+          <span className="text-sm">×</span>
+        </button>
+      )}
     </div>
   );
 }

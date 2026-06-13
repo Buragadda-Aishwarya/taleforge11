@@ -1,12 +1,15 @@
 import {
   addResearchToStoryBible,
-  queryResearchAgent,
 } from '../services/research.service.js';
+import { routeAgentTask } from '../services/agents/agentRouter.service.js';
 
 export const queryResearch = async (req, res, next) => {
   try {
     const { query } = req.body;
-    const research = await queryResearchAgent(query);
+    const research = await routeAgentTask({
+      type: 'research',
+      payload: { researchQuery: query },
+    });
 
     res.status(200).json({
       message: 'Research query completed.',

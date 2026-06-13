@@ -18,7 +18,7 @@ export function HistoricalTimelineCard({ timeline }) {
           {timeline.map((item, idx) => (
             <div key={idx} className={`flex flex-col items-center gap-4 ${!item.isCore && idx > 1 ? 'opacity-40' : ''}`}>
               <div className={`w-12 h-12 rounded-xl glass-panel flex items-center justify-center font-label-md text-sm ${item.isCore ? 'border-secondary-fixed/50 text-secondary-fixed ring-4 ring-secondary-fixed/10' : idx === 0 ? 'border-primary/50 text-primary' : 'border-white/20'}`}>
-                <span className="text-center leading-tight">{item.year.split(' ')[0]}<br/>{item.year.split(' ')[1]}</span>
+                <span className="text-center leading-tight">{String(item.year).split(' ')[0]}<br/>{String(item.year).split(' ')[1] || ''}</span>
               </div>
               <div className="text-center mt-2">
                 <p className={`font-label-sm text-xs uppercase tracking-wider ${item.isCore ? 'text-on-surface font-bold' : 'text-on-surface'}`}>{item.label}</p>

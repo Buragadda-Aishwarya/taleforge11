@@ -7,6 +7,7 @@ import {
 const router = Router();
 
 router.post('/query', queryResearch);
+router.post('/save', addResearch);
 router.post('/add-to-story-bible', addResearch);
 
 export default router;

@@ -1,9 +1,9 @@
-export default function PerformanceMetrics() {
+export default function PerformanceMetrics({ summary }) {
   const metrics = [
-    { label: "LATENCY", value: "142ms" },
-    { label: "TOKENS/SEC", value: "8.4k" },
-    { label: "MEMORY", value: "64%" },
-    { label: "AGENTS", value: "12" },
+    { label: "AVG LATENCY", value: summary ? `${Math.round(summary.averageDuration)}ms` : "--" },
+    { label: "COMPLETED", value: summary ? `${summary.completedOperations}` : "0" },
+    { label: "FAILED", value: summary ? `${summary.failedOperations}` : "0" },
+    { label: "OPERATIONS", value: summary ? `${summary.totalOperations}` : "0" },
   ];
 
   return (

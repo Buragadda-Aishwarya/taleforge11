@@ -2,6 +2,7 @@ import {
   generateStoryBibleFromText,
   uploadStoryWithIngestion,
 } from '../services/story.service.js';
+import { withAgentLog } from '../services/agentLog.service.js';
 
 export const uploadStory = async (req, res, next) => {
   try {
@@ -19,10 +20,22 @@ export const uploadStory = async (req, res, next) => {
       throw error;
     }
 
-    const result = await uploadStoryWithIngestion({
-      title: title.trim(),
-      content: content.trim(),
-    });
+    const trimmedTitle = title.trim();
+    const trimmedContent = content.trim();
+    const result = await withAgentLog(
+      {
+        agentName: 'Story Bible Agent',
+        action: `Upload and generate Story Bible: ${trimmedTitle}`,
+        metadata: {
+          provider: 'Gemini',
+          route: 'story_bible',
+        },
+      },
+      () => uploadStoryWithIngestion({
+        title: trimmedTitle,
+        content: trimmedContent,
+      })
+    );
 
     res.status(201).json({
       message: 'Story uploaded and indexed successfully.',
@@ -43,7 +56,17 @@ export const generateBible = async (req, res, next) => {
       throw error;
     }
 
-    const storyBible = await generateStoryBibleFromText(storyContent);
+    const storyBible = await withAgentLog(
+      {
+        agentName: 'Story Bible Agent',
+        action: 'Generate Story Bible from raw text',
+        metadata: {
+          provider: 'Gemini',
+          route: 'story_bible',
+        },
+      },
+      () => generateStoryBibleFromText(storyContent)
+    );
 
     res.status(200).json({
       message: 'Story bible generated successfully.',

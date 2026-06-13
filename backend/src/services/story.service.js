@@ -1,14 +1,68 @@
 import { query } from '../config/db.js';
 import { addStoryChunks } from './chroma.service.js';
-import { generateEmbeddings, generateStoryBible } from './gemini.service.js';
+import {
+  extractRelationships,
+  generateEmbeddings,
+  generateStoryBible,
+  normalizeStoryBible,
+} from './gemini.service.js';
 
 const CHUNK_MAX_LENGTH = 1200;
 const CHUNK_OVERLAP_LENGTH = 150;
 
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
+const extractFallbackCharacterNames = (content) => {
+  const stopWords = new Set([
+    'A',
+    'An',
+    'And',
+    'As',
+    'At',
+    'But',
+    'Finally',
+    'First',
+    'He',
+    'Her',
+    'His',
+    'However',
+    'In',
+    'It',
+    'Later',
+    'Meanwhile',
+    'One',
+    'She',
+    'Suddenly',
+    'The',
+    'Then',
+    'They',
+    'This',
+    'Villain',
+    'With',
+  ]);
+  const nameCounts = new Map();
+  const patterns = [
+    /\b(?:named|called|known as)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+    /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:said|asked|replied|whispered|shouted|thought|walked|ran|lived|met|found|helped|searched|followed|noticed|owned|mentored|hated|loved)\b/g,
+    /\b(?:Mr|Mrs|Ms|Dr|Captain|King|Queen|Princess|Prince|Lord|Lady)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of content.matchAll(pattern)) {
+      const name = match[1].replace(/^the\s+/i, '').trim();
+      if (!name || stopWords.has(name) || stopWords.has(name.split(/\s+/)[0])) continue;
+      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+    }
+  }
+
+  return [...nameCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name)
+    .slice(0, 12);
+};
+
 const fallbackStoryBibleFromText = (content) => {
-  const names = unique(content.match(/\b[A-Z][a-z]{2,}\b/g) || []).slice(0, 12);
+  const names = extractFallbackCharacterNames(content);
   const locationKeywords = [
     'ocean',
     'kingdom',
@@ -45,7 +99,13 @@ const fallbackStoryBibleFromText = (content) => {
     });
   }
 
-  return {
+  const sentences = content
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+  return normalizeStoryBible({
     characters: names.map((name) => ({
       name,
       description: `${name} is mentioned in the uploaded story.`,
@@ -54,7 +114,12 @@ const fallbackStoryBibleFromText = (content) => {
     })),
     locations,
     worldRules: rules,
-  };
+    timelines: sentences.map((sentence, index) => ({
+      order: index + 1,
+      event: sentence,
+      evidence: sentence,
+    })),
+  }, content);
 };
 
 export const createStory = async ({ title, content }) => {
@@ -141,12 +206,128 @@ export const generateStoryBibleFromText = async (storyContent) => {
     characters: storyBible.characters || [],
     locations: storyBible.locations || [],
     worldRules: storyBible.worldRules || [],
+    timelines: storyBible.timelines || [],
+  };
+};
+
+const persistStoryBible = async ({ storyId, storyBible, relationships }) => {
+  if (!Number.isInteger(Number(storyId))) {
+    return {
+      characters: [],
+      locations: [],
+      worldRules: [],
+      timelines: [],
+      relationships: [],
+      persisted: false,
+    };
+  }
+
+  const savedCharacters = [];
+  const savedLocations = [];
+  const savedWorldRules = [];
+  const savedRelationships = [];
+
+  for (const character of storyBible.characters) {
+    const description = [
+      character.description,
+      character.role ? `Role: ${character.role}` : '',
+    ].filter(Boolean).join(' ');
+    const result = await query(
+      `
+        INSERT INTO characters (story_id, name, description)
+        VALUES ($1, $2, $3)
+        RETURNING id, story_id, name, description, created_at, updated_at;
+      `,
+      [storyId, character.name || 'Unnamed Character', description]
+    );
+    savedCharacters.push(result.rows[0]);
+  }
+
+  for (const location of storyBible.locations) {
+    const description = [
+      location.description,
+      location.significance ? `Significance: ${location.significance}` : '',
+    ].filter(Boolean).join(' ');
+    const result = await query(
+      `
+        INSERT INTO locations (story_id, name, description)
+        VALUES ($1, $2, $3)
+        RETURNING id, story_id, name, description, created_at, updated_at;
+      `,
+      [storyId, location.name || 'Unnamed Location', description]
+    );
+    savedLocations.push(result.rows[0]);
+  }
+
+  for (const worldRule of storyBible.worldRules) {
+    const ruleText = [
+      worldRule.rule,
+      worldRule.evidence ? `Evidence: ${worldRule.evidence}` : '',
+    ].filter(Boolean).join(' ');
+    const result = await query(
+      `
+        INSERT INTO world_rules (story_id, rule, category)
+        VALUES ($1, $2, $3)
+        RETURNING id, story_id, rule, category, created_at, updated_at;
+      `,
+      [storyId, ruleText, worldRule.category || 'World Rule']
+    );
+    savedWorldRules.push(result.rows[0]);
+  }
+
+  for (const relationship of relationships) {
+    const result = await query(
+      `
+        INSERT INTO relationships (story_id, source, target, relation)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, story_id, source, target, relation, created_at;
+      `,
+      [
+        storyId,
+        relationship.source.trim(),
+        relationship.target.trim(),
+        relationship.relation.trim(),
+      ]
+    );
+    savedRelationships.push(result.rows[0]);
+  }
+
+  return {
+    characters: savedCharacters,
+    locations: savedLocations,
+    worldRules: savedWorldRules,
+    timelines: storyBible.timelines || [],
+    relationships: savedRelationships,
+    persisted: true,
   };
 };
 
 export const uploadStoryWithIngestion = async ({ title, content }) => {
   const story = await createStory({ title, content });
   const storyBible = await generateStoryBibleFromText(content);
+  const relationships = await extractRelationships(content, storyBible);
+  let persistedStoryBible;
+
+  try {
+    persistedStoryBible = await persistStoryBible({
+      storyId: story.id,
+      storyBible,
+      relationships,
+    });
+  } catch (error) {
+    console.warn('Story Bible persistence failed. Upload will continue.');
+    console.warn(error.message || error);
+    persistedStoryBible = {
+      characters: [],
+      locations: [],
+      worldRules: [],
+      timelines: [],
+      relationships: [],
+      persisted: false,
+      reason: error.message || 'Story Bible persistence failed.',
+    };
+  }
+
   const chunks = splitStoryIntoChunks(content);
   let vectorIndex = {
     status: 'skipped',
@@ -183,6 +364,8 @@ export const uploadStoryWithIngestion = async ({ title, content }) => {
   return {
     story,
     storyBible,
+    relationships,
+    persistedStoryBible,
     chunks,
     vectorIndex,
   };

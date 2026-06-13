@@ -7,6 +7,8 @@ import {
 import PageContainer from '../components/layout/PageContainer'
 import {
   loadLatestStoryUpload,
+  runRecruiterDemo,
+  saveContinuityCheck,
   saveLatestStoryBible,
   saveLatestStoryUpload,
   uploadStory,
@@ -27,6 +29,82 @@ const analysisItems = [
   { label: 'World Rules', value: '0', color: 'text-primary' },
 ]
 
+const characterStopWords = new Set([
+  'A',
+  'An',
+  'And',
+  'As',
+  'At',
+  'But',
+  'Finally',
+  'First',
+  'He',
+  'Her',
+  'His',
+  'However',
+  'In',
+  'It',
+  'Later',
+  'Meanwhile',
+  'One',
+  'She',
+  'Suddenly',
+  'The',
+  'Then',
+  'They',
+  'This',
+  'Villain',
+  'With',
+])
+
+const getPreviewCharacterCount = (source) => {
+  const names = new Set()
+  const patterns = [
+    /\b(?:named|called|known as)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+    /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:said|asked|replied|whispered|shouted|thought|walked|ran|lived|met|found|helped|searched|followed|noticed|owned|mentored|hated|loved)\b/g,
+    /\b(?:Mr|Mrs|Ms|Dr|Captain|King|Queen|Princess|Prince|Lord|Lady)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+  ]
+
+  patterns.forEach((pattern) => {
+    for (const match of source.matchAll(pattern)) {
+      const name = match[1].replace(/^the\s+/i, '').trim()
+      const firstWord = name.split(/\s+/)[0]
+      if (name && !characterStopWords.has(name) && !characterStopWords.has(firstWord)) {
+        names.add(name.toLowerCase())
+      }
+    }
+  })
+
+  return names.size
+}
+
+const getPreviewLocationCount = (source) => {
+  const locations = new Set()
+  const namedLocationPattern = /\b(?:in|at|near|inside|outside|from|toward|to)\s+(?:the\s+)?([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*\s+(?:Kingdom|Forest|City|Tower|Village|Castle|Island|Ocean|Realm|Temple|River|Mountain|Valley))\b/g
+  const keywordPattern = /\b(ocean|kingdom|city|forest|realm|tower|village|castle|island|temple|river|mountain|valley)\b/gi
+
+  for (const match of source.matchAll(namedLocationPattern)) {
+    locations.add(match[1].toLowerCase())
+  }
+
+  for (const match of source.matchAll(keywordPattern)) {
+    locations.add(match[1].toLowerCase())
+  }
+
+  return locations.size
+}
+
+const getPreviewWorldRuleCount = (source) => {
+  const rulePatterns = [
+    /\b(can(?:not|'t)|must|never|always|forbidden|only|requires|required|law|rule|curse|prophecy|magic|hates|cannot swim)\b/gi,
+  ]
+  const matches = rulePatterns.flatMap((pattern) => source.match(pattern) || [])
+  return new Set(matches.map((match) => match.toLowerCase())).size
+}
+
+const getPreviewTimelineCount = (source) =>
+  source.split(/[.!?]+/).map((sentence) => sentence.trim()).filter(Boolean).length
+
 export default function IngestionHub() {
   const navigate = useNavigate()
   const [uploadedFiles, setUploadedFiles] = useState([])
@@ -34,6 +112,7 @@ export default function IngestionHub() {
   const [storyDraft, setStoryDraft] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [demoProcessing, setDemoProcessing] = useState(false)
   const [processed, setProcessed] = useState(false)
   const [processError, setProcessError] = useState('')
   const [latestUpload, setLatestUpload] = useState(() => loadLatestStoryUpload())
@@ -42,34 +121,30 @@ export default function IngestionHub() {
   const getSourceText = () => normalizeText(storyDraft) || normalizeText(uploadedText)
 
   const getAnalysisItems = () => {
+    const source = getSourceText()
     const uploadResult = latestUpload?.uploadResult
     const storyBible = uploadResult?.storyBible
+    const latestSource = normalizeText(latestUpload?.storyContent || '')
+    const isCurrentProcessedStory = Boolean(storyBible && source && latestSource === source)
 
-    if (storyBible) {
+    if (isCurrentProcessedStory) {
       return [
         { label: 'Characters Detected', value: `${storyBible.characters?.length || 0}`, color: 'text-primary' },
         { label: 'Locations Mapped', value: `${storyBible.locations?.length || 0}`, color: 'text-secondary' },
-        { label: 'Timeline Events', value: `${uploadResult.chunks?.length || 0}`, color: 'text-tertiary' },
+        { label: 'Timeline Events', value: `${storyBible.timelines?.length || 0}`, color: 'text-tertiary' },
         { label: 'World Rules', value: `${storyBible.worldRules?.length || 0}`, color: 'text-primary' },
       ]
     }
 
-    const source = getSourceText()
     if (!source) {
       return analysisItems
     }
 
-    const sentenceCount = source.split(/[.?!]+/).filter(Boolean).length
-    const words = source.split(/\s+/).filter(Boolean)
-    const properNouns = new Set((source.match(/\b[A-Z][a-z]{2,}\b/g) || []).map((token) => token.toLowerCase()))
-    const locationKeywords = ['kingdom', 'city', 'forest', 'realm', 'tower', 'village', 'ocean', 'space', 'castle', 'island']
-    const locationsMatched = locationKeywords.reduce((count, keyword) => count + (new RegExp(`\\b${keyword}\\b`, 'gi').test(source) ? 1 : 0), 0)
-
     return [
-      { label: 'Characters Detected', value: `${Math.max(1, Math.min(18, properNouns.size || Math.ceil(words.length / 25)))}`, color: 'text-primary' },
-      { label: 'Locations Mapped', value: `${Math.max(1, Math.min(10, locationsMatched || Math.ceil(sentenceCount / 2)))}`, color: 'text-secondary' },
-      { label: 'Timeline Events', value: `${Math.max(1, Math.min(40, sentenceCount + Math.floor(words.length / 50)))}`, color: 'text-tertiary' },
-      { label: 'World Rules', value: `${Math.max(1, Math.min(10, Math.ceil((properNouns.size + locationsMatched) / 3)))}`, color: 'text-primary' },
+      { label: 'Characters Detected', value: `${getPreviewCharacterCount(source)}`, color: 'text-primary' },
+      { label: 'Locations Mapped', value: `${getPreviewLocationCount(source)}`, color: 'text-secondary' },
+      { label: 'Timeline Events', value: `${getPreviewTimelineCount(source)}`, color: 'text-tertiary' },
+      { label: 'World Rules', value: `${getPreviewWorldRuleCount(source)}`, color: 'text-primary' },
     ]
   }
 
@@ -77,8 +152,11 @@ export default function IngestionHub() {
     const hasDraft = normalizeText(storyDraft).length > 0
     const hasFiles = uploadedFiles.length > 0
     const uploadResult = latestUpload?.uploadResult
+    const source = getSourceText()
+    const latestSource = normalizeText(latestUpload?.storyContent || '')
+    const isCurrentProcessedStory = Boolean(uploadResult && source && latestSource === source)
 
-    if (uploadResult) {
+    if (isCurrentProcessedStory) {
       const vectorIndexed = uploadResult.vectorIndex?.status === 'indexed'
 
       return [
@@ -188,6 +266,43 @@ export default function IngestionHub() {
     }
   }
 
+  const handleUseDemoStory = async () => {
+    setDemoProcessing(true)
+    setProcessed(false)
+    setProcessError('')
+
+    try {
+      const demoResult = await runRecruiterDemo('fantasy')
+      const storyContent = demoResult.demoStory?.content || ''
+      const uploadResult = demoResult.uploadResult
+
+      saveLatestStoryBible({
+        storyContent,
+        storyBible: uploadResult.storyBible,
+      })
+      const uploadRecord = saveLatestStoryUpload({
+        storyContent,
+        uploadResult,
+      })
+      saveContinuityCheck(demoResult.continuity)
+      localStorage.setItem('taleforge.demo.latest', JSON.stringify({
+        demoStory: demoResult.demoStory,
+        scene: demoResult.scene,
+        graph: demoResult.graph,
+        evaluation: demoResult.evaluation,
+        generatedAt: new Date().toISOString(),
+      }))
+      setLatestUpload(uploadRecord)
+      setStoryDraft(storyContent)
+      setDemoProcessing(false)
+      setProcessed(true)
+      navigate('/engine')
+    } catch (error) {
+      setDemoProcessing(false)
+      setProcessError(error.message || 'Unable to run recruiter demo.')
+    }
+  }
+
   return (
     <PageContainer>
       <div className="grid-blueprint min-h-screen">
@@ -205,10 +320,30 @@ export default function IngestionHub() {
               </p>
             </div>
             <div className="shrink-0">
-              <span className="px-4 py-2 bg-surface-container/80 backdrop-blur-sm rounded-full border border-secondary/30 text-xs font-mono text-secondary uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
-                V4.2 NEURAL LINK
-              </span>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <button
+                  type="button"
+                  onClick={handleUseDemoStory}
+                  disabled={processing || demoProcessing}
+                  className="px-4 py-2 bg-secondary/10 border border-secondary/30 rounded-full text-xs font-mono text-secondary uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-secondary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {demoProcessing ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" />
+                      Running Demo
+                    </>
+                  ) : (
+                    <>
+                      <Cpu className="w-3.5 h-3.5" />
+                      Use Demo Story
+                    </>
+                  )}
+                </button>
+                <span className="px-4 py-2 bg-surface-container/80 backdrop-blur-sm rounded-full border border-secondary/30 text-xs font-mono text-secondary uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+                  V4.2 NEURAL LINK
+                </span>
+              </div>
             </div>
           </section>
 

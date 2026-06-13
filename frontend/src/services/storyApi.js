@@ -64,7 +64,7 @@ export const queryResearch = async (query) => {
 };
 
 export const addResearchToStoryBible = async ({ storyId, research }) => {
-  const response = await fetch(`${API_BASE_URL}/api/research/add-to-story-bible`, {
+  const response = await fetch(`${API_BASE_URL}/api/research/save`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -75,13 +75,145 @@ export const addResearchToStoryBible = async ({ storyId, research }) => {
   return parseResponse(response);
 };
 
-export const generateScenePaths = async (storyId) => {
+export const createCharacter = async ({ storyId, character }) => {
+  const response = await fetch(`${API_BASE_URL}/api/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storyId, character }),
+  });
+
+  return parseResponse(response);
+};
+
+export const createWorldRule = async ({ storyId, worldRule }) => {
+  const response = await fetch(`${API_BASE_URL}/api/world-rules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storyId, worldRule }),
+  });
+
+  return parseResponse(response);
+};
+
+export const createLocation = async ({ storyId, location }) => {
+  const response = await fetch(`${API_BASE_URL}/api/locations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storyId, location }),
+  });
+
+  return parseResponse(response);
+};
+
+export const generateScenePaths = async (storyId, provider = 'openai') => {
   const response = await fetch(`${API_BASE_URL}/api/scene/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ storyId }),
+    body: JSON.stringify({ storyId, provider }),
+  });
+
+  return parseResponse(response);
+};
+
+export const expandScenePath = async ({ storyId, selectedPath, provider = 'openai' }) => {
+  const response = await fetch(`${API_BASE_URL}/api/scene/expand`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ storyId, selectedPath, provider }),
+  });
+
+  return parseResponse(response);
+};
+
+export const getStoryGraph = async (storyId) => {
+  const response = await fetch(`${API_BASE_URL}/api/graph/story/${storyId}`);
+  return parseResponse(response);
+};
+
+export const getAgentLogs = async ({ limit = 50, search = '', agentName = '', actionType = '', status = '' } = {}) => {
+  const queryParameters = new URLSearchParams();
+  if (limit) queryParameters.set('limit', String(limit));
+  if (search) queryParameters.set('search', search);
+  if (agentName) queryParameters.set('agentName', agentName);
+  if (actionType) queryParameters.set('actionType', actionType);
+  if (status) queryParameters.set('status', status);
+
+  const response = await fetch(`${API_BASE_URL}/api/agents/logs?${queryParameters.toString()}`);
+  return parseResponse(response);
+};
+
+export const deleteAgentLog = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/api/agents/logs/${id}`, {
+    method: 'DELETE',
+  });
+  return parseResponse(response);
+};
+
+export const clearAgentHistory = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/agents/logs`, {
+    method: 'DELETE',
+  });
+  return parseResponse(response);
+};
+
+export const getContinuityChecks = async ({ status = 'history', limit = 100 } = {}) => {
+  const queryParameters = new URLSearchParams();
+  if (status) queryParameters.set('status', status);
+  if (limit) queryParameters.set('limit', String(limit));
+
+  const response = await fetch(`${API_BASE_URL}/api/continuity?${queryParameters.toString()}`);
+  return parseResponse(response);
+};
+
+export const updateContinuityCheckStatus = async (id, status) => {
+  const response = await fetch(`${API_BASE_URL}/api/continuity/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status }),
+  });
+
+  return parseResponse(response);
+};
+
+export const getDemoStories = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/demo/stories`);
+  const payload = await parseResponse(response);
+  return payload.stories;
+};
+
+export const runRecruiterDemo = async (demoId = 'fantasy') => {
+  const response = await fetch(`${API_BASE_URL}/api/demo/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ demoId }),
+  });
+
+  return parseResponse(response);
+};
+
+export const getEvaluationMetrics = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/evaluation/metrics`);
+  const payload = await parseResponse(response);
+  return payload.evaluation;
+};
+
+export const getPocDashboardMetrics = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/evaluation/dashboard`);
+  const payload = await parseResponse(response);
+  return payload.dashboard;
+};
+
+export const runEvaluationBenchmarks = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/evaluation/run`, {
+    method: 'POST',
   });
 
   return parseResponse(response);

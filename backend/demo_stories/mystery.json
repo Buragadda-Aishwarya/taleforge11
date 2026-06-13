@@ -1,0 +1,29 @@
+{
+  "id": "mystery",
+  "genre": "Mystery",
+  "title": "The Clockmaker's Last Hour",
+  "content": "Detective Mara investigates the death of Elias Vane inside the locked clocktower. Mara cannot read old Latin, so she depends on Archivist Theo for inscriptions. Theo mentors Mara in historical records but never enters crime scenes after sunset. The brass key belongs to Elias Vane and opens the tower archive. No clock in the tower can strike thirteen because the thirteenth bell was removed years ago.",
+  "knownCharacters": [
+    "Detective Mara",
+    "Elias Vane",
+    "Archivist Theo"
+  ],
+  "knownRules": [
+    "Mara cannot read old Latin.",
+    "Theo never enters crime scenes after sunset.",
+    "The brass key belongs to Elias Vane.",
+    "No clock in the tower can strike thirteen."
+  ],
+  "knownContradictions": [
+    {
+      "fact": "Mara cannot read old Latin.",
+      "scene": "Mara instantly translates the old Latin inscription without help.",
+      "expected": "Character Knowledge Violation"
+    },
+    {
+      "fact": "No clock in the tower can strike thirteen.",
+      "scene": "At midnight, the tower clock strikes thirteen clear notes.",
+      "expected": "Lore Violation"
+    }
+  ]
+}

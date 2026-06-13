@@ -1,13 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Shield, AlertTriangle, CheckCircle2, Clock, ArrowRight, Search } from 'lucide-react'
 import PageContainer from '../components/layout/PageContainer'
 import {
   checkContinuity,
-  loadContinuityChecks,
+  getContinuityChecks,
   loadLatestStoryUpload,
-  saveContinuityCheck,
-  updateContinuityCheck,
+  updateContinuityCheckStatus,
 } from '../services/storyApi'
 
 const severityColors = {
@@ -37,13 +36,13 @@ const getKnownFactsFromStoryBible = (storyBible) => [
 export default function ContinuityDashboard() {
   const navigate = useNavigate()
   const [selectedConflict, setSelectedConflict] = useState(null)
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('active')
   const [scene, setScene] = useState('Aria swims across the ocean.')
   const [checking, setChecking] = useState(false)
   const [checkError, setCheckError] = useState('')
   const [continuityResult, setContinuityResult] = useState(null)
   const [latestUpload] = useState(() => loadLatestStoryUpload())
-  const [continuityChecks, setContinuityChecks] = useState(() => loadContinuityChecks())
+  const [continuityChecks, setContinuityChecks] = useState([])
   const [scanTime, setScanTime] = useState(0)
 
   const storyBible = latestUpload?.uploadResult?.storyBible
@@ -53,14 +52,33 @@ export default function ContinuityDashboard() {
     (storyBible?.locations?.length || 0) +
     (storyBible?.worldRules?.length || 0)
   const conflictsFound = continuityChecks.filter((check) => check.contradiction).length
-  const autoResolved = continuityChecks.filter((check) => check.status === 'resolved').length
-  const filteredChecks = continuityChecks.filter((check) => filter === 'all' || check.status === filter)
+  const activeCount = continuityChecks.filter((check) => check.status === 'active').length
+  const ignoredCount = continuityChecks.filter((check) => check.status === 'ignored').length
+  const resolvedCount = continuityChecks.filter((check) => check.status === 'resolved').length
+  const filteredChecks = continuityChecks.filter((check) => filter === 'history' || check.status === filter)
+
   const stats = [
     { label: 'Facts Tracked', value: `${factsTracked}`, icon: Shield, color: 'text-secondary' },
-    { label: 'Conflicts Found', value: `${conflictsFound}`, icon: AlertTriangle, color: 'text-primary' },
-    { label: 'Auto-Resolved', value: `${autoResolved}`, icon: CheckCircle2, color: 'text-secondary' },
-    { label: 'Scan Time', value: scanTime ? `${scanTime}ms` : '-', icon: Clock, color: 'text-tertiary' },
+    { label: 'Active Contradictions', value: `${activeCount}`, icon: AlertTriangle, color: 'text-primary' },
+    { label: 'Ignored', value: `${ignoredCount}`, icon: Shield, color: 'text-tertiary' },
+    { label: 'Resolved', value: `${resolvedCount}`, icon: CheckCircle2, color: 'text-secondary' },
   ]
+
+  const loadChecks = async (status = filter) => {
+    try {
+      const payload = await getContinuityChecks({ status: status || 'history', limit: 200 })
+      setContinuityChecks(payload.checks || [])
+      if (!payload.checks?.length) {
+        setSelectedConflict(null)
+      }
+    } catch (error) {
+      console.warn('Unable to load continuity checks.', error.message || error)
+    }
+  }
+
+  useEffect(() => {
+    loadChecks(filter)
+  }, [filter])
 
   const handleContinuityCheck = async () => {
     const normalizedScene = scene.trim()
@@ -74,16 +92,20 @@ export default function ContinuityDashboard() {
     try {
       const result = await checkContinuity(normalizedScene, knownFacts)
       const elapsed = Math.max(1, Math.round(performance.now() - startedAt))
-      const savedCheck = saveContinuityCheck({
+      const savedCheck = result.savedCheck || {
         ...result,
+        status: result.contradiction ? 'active' : 'resolved',
+        createdAt: new Date().toISOString(),
+      }
+      const selected = {
+        ...savedCheck,
         severity: getSeverity(result.confidence),
-        scanTimeMs: elapsed,
-      })
+      }
 
       setContinuityResult(result)
-      setContinuityChecks(loadContinuityChecks())
-      setSelectedConflict(savedCheck)
-      setScanTime(elapsed)
+      setSelectedConflict(selected)
+      setScanTime(result.scanTimeMs || elapsed)
+      await loadChecks(filter)
     } catch (error) {
       setCheckError(error.message || 'Continuity check failed.')
     } finally {
@@ -91,14 +113,22 @@ export default function ContinuityDashboard() {
     }
   }
 
-  const updateSelectedCheck = (updates) => {
+  const updateSelectedCheck = async (status) => {
     if (!selectedConflict) return
 
-    const updatedChecks = updateContinuityCheck(selectedConflict.id, updates)
-    const updatedSelected = { ...selectedConflict, ...updates }
+    try {
+      const payload = await updateContinuityCheckStatus(selectedConflict.id, status)
+      const updated = payload.check || { ...selectedConflict, status }
+      await loadChecks(filter)
 
-    setContinuityChecks(updatedChecks)
-    setSelectedConflict(updatedSelected)
+      if (filter !== 'history' && updated.status !== filter) {
+        setSelectedConflict(null)
+      } else {
+        setSelectedConflict(updated)
+      }
+    } catch (error) {
+      console.warn('Unable to update continuity check status.', error.message || error)
+    }
   }
 
   return (
@@ -223,8 +253,8 @@ export default function ContinuityDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-2 space-y-3">
-            <div className="flex items-center gap-2 mb-4">
-              {['all', 'unresolved', 'resolved'].map((item) => (
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {['active', 'ignored', 'resolved', 'history'].map((item) => (
                 <button
                   key={item}
                   onClick={() => setFilter(item)}
@@ -248,11 +278,13 @@ export default function ContinuityDashboard() {
                 }`}
               >
                 <div className="flex items-start justify-between gap-3 mb-2">
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${severityColors[item.severity || 'high']}`}>
-                    {(item.severity || 'high').toUpperCase()} · {item.type || 'Continuity'}
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${severityColors[getSeverity(item.confidence)]}`}>
+                    {getSeverity(item.confidence).toUpperCase()} · {item.type || 'Continuity'}
                   </span>
                   {item.status === 'resolved' ? (
                     <CheckCircle2 className="w-4 h-4 text-secondary shrink-0" />
+                  ) : item.status === 'ignored' ? (
+                    <Shield className="w-4 h-4 text-tertiary shrink-0" />
                   ) : (
                     <AlertTriangle className="w-4 h-4 text-primary shrink-0" />
                   )}
@@ -267,7 +299,7 @@ export default function ContinuityDashboard() {
             {!filteredChecks.length && (
               <div className="glass-panel rounded-xl p-5 text-center">
                 <p className="font-sora text-sm text-on-surface-variant">
-                  No {filter === 'all' ? '' : filter} continuity checks yet.
+                  No {filter === 'history' ? '' : filter} continuity checks yet.
                 </p>
               </div>
             )}
@@ -278,8 +310,8 @@ export default function ContinuityDashboard() {
               <div className="glass-panel rounded-xl p-6 h-full">
                 <div className="flex items-start justify-between mb-6">
                   <div>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${severityColors[selectedConflict.severity || 'high']} mb-3 inline-block`}>
-                      {(selectedConflict.severity || 'high').toUpperCase()} SEVERITY · {selectedConflict.type || 'Continuity'}
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${severityColors[getSeverity(selectedConflict.confidence)]} mb-3 inline-block`}>
+                      {getSeverity(selectedConflict.confidence).toUpperCase()} SEVERITY · {selectedConflict.type || 'Continuity'}
                     </span>
                     <h3 className="font-sora text-xl font-semibold text-on-surface">
                       {selectedConflict.contradiction ? 'Contradiction Found' : 'No Contradiction Found'}
@@ -307,13 +339,13 @@ export default function ContinuityDashboard() {
                       EDIT SCENE
                     </button>
                     <button
-                      onClick={() => updateSelectedCheck({ status: 'resolved' })}
+                      onClick={() => updateSelectedCheck('resolved')}
                       className="flex-1 py-2.5 bg-secondary/10 border border-secondary/20 text-secondary font-mono text-xs rounded-lg hover:bg-secondary/20 transition-all"
                     >
                       MARK RESOLVED
                     </button>
                     <button
-                      onClick={() => updateSelectedCheck({ status: 'resolved', ignored: true })}
+                      onClick={() => updateSelectedCheck('ignored')}
                       className="flex-1 py-2.5 bg-surface-container border border-white/10 text-on-surface-variant font-mono text-xs rounded-lg hover:text-on-surface transition-all"
                     >
                       IGNORE

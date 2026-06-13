@@ -12,7 +12,7 @@ export default function GenerateButton({ onGenerate, isGenerating }) {
       }`}
     >
       <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-      {isGenerating ? 'Synthesizing...' : 'Regenerate'}
+      {isGenerating ? 'Synthesizing...' : 'Generate Next Scene'}
     </button>
   );
 }

@@ -14,7 +14,7 @@ export function ContextModeCard({ modes }) {
           
           return (
             <span key={idx} className={`${styles} border px-3 py-1.5 rounded font-label-sm text-xs tracking-wider cursor-pointer hover:brightness-125 transition-all`}>
-              {mode}
+              {typeof mode === 'string' ? mode : mode.label}
             </span>
           );
         })}

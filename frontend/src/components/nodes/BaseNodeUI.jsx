@@ -1,12 +1,32 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { User, Castle, Diamond, Book, HelpCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  Book,
+  Calendar,
+  Castle,
+  Diamond,
+  Flag,
+  HelpCircle,
+  Network,
+  Route,
+  Scale,
+  Search,
+  User,
+} from 'lucide-react';
 
 const IconMap = {
   User,
   Castle,
   Diamond,
   Book,
+  AlertTriangle,
+  Calendar,
+  Flag,
+  Network,
+  Route,
+  Scale,
+  Search,
 };
 
 
@@ -22,7 +42,10 @@ export default function BaseNodeUI({ id, data, selected, ringColor, typeLabel, x
       <Handle type="source" position={Position.Bottom} style={{ background: 'transparent', border: 'none', width: 1, height: 1 }} />
 
       {/* Node Avatar/Icon Container */}
-      <div className={`relative ${isCentral ? 'w-20 h-20' : 'w-14 h-14'} rounded-2xl overflow-hidden bg-zinc-900 border-2 ${ringColor} backdrop-blur-md flex items-center justify-center z-10 transition-all`}>
+      <div
+        className={`relative ${isCentral ? 'w-20 h-20' : 'w-14 h-14'} rounded-2xl overflow-hidden bg-zinc-900 border-2 ${ringColor} backdrop-blur-md flex items-center justify-center z-10 transition-all`}
+        style={data.color ? { boxShadow: `0 0 18px ${data.color}55` } : undefined}
+      >
         {data.imageUrl ? (
           <img 
             src={data.imageUrl} 
@@ -30,7 +53,7 @@ export default function BaseNodeUI({ id, data, selected, ringColor, typeLabel, x
             className={`w-full h-full object-cover transition-opacity duration-300 ${selected ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'}`}
           />
         ) : (
-          <IconComponent className={`${isCentral ? 'w-8 h-8' : 'w-6 h-6'} text-zinc-300`} />
+          <IconComponent className={`${isCentral ? 'w-8 h-8' : 'w-6 h-6'} text-zinc-300`} style={data.color ? { color: data.color } : undefined} />
         )}
         
         {/* Scanline overlay */}

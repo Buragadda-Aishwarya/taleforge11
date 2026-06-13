@@ -2,7 +2,7 @@ import { TrendingUp, Swords, Fingerprint, Eye, Save, Plus } from 'lucide-react';
 
 
 
-export default function NarrativePathCard({ path, isSelected, onSelect }) {
+export default function NarrativePathCard({ path, isSelected, onSelect, onInsert, isExpanding }) {
   const Icon = path.icon === 'growth' ? TrendingUp : path.icon === 'conflict' ? Swords : Fingerprint;
   
   const iconColor = path.icon === 'growth' ? 'text-tf-primary bg-tf-primary/10' : 
@@ -85,8 +85,15 @@ export default function NarrativePathCard({ path, isSelected, onSelect }) {
 
       <div className={`mt-6 pt-4 border-t border-white/5 gap-2 transition-all duration-300 h-0 overflow-hidden group-hover:h-24 opacity-0 group-hover:opacity-100 flex flex-col`}>
          <div className="flex gap-2">
-            <button className="flex-1 bg-tf-primary text-black py-2 rounded-lg font-mono text-xs font-semibold uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1">
-              <Plus className="w-3 h-3" /> Insert Into Story
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onInsert?.();
+              }}
+              disabled={isExpanding}
+              className="flex-1 bg-tf-primary text-black py-2 rounded-lg font-mono text-xs font-semibold uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+            >
+              <Plus className="w-3 h-3" /> {isExpanding ? 'Generating...' : 'Insert Into Story'}
             </button>
          </div>
          <div className="flex gap-2">
