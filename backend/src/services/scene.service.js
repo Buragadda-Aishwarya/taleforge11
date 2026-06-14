@@ -6,10 +6,33 @@ import {
 } from '../repositories/scene.repository.js';
 import { searchMemory, searchRelevantContext } from './chroma.service.js';
 import { runContinuityAgent } from './continuityAgent.js';
+import { logEvent } from './agentLog.service.js';
 import {
   expandScenePath,
   generateScenePaths,
 } from './sceneGeneration.service.js';
+
+const summarizeForLog = (value, maxLength = 1800) => {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+};
+
+const logSceneDebug = async ({ action, status = 'completed', metadata = {} }) => {
+  try {
+    await logEvent({
+      agentName: 'Scene Debug Logger',
+      actionType: 'scene_debug',
+      action,
+      description: action,
+      status,
+      duration: 0,
+      metadata,
+    });
+  } catch (error) {
+    console.warn('Scene debug log persistence failed.');
+    console.warn(error.message || error);
+  }
+};
 
 const loadStoryBible = async (storyId) => {
   const storyResult = await query(
@@ -118,6 +141,45 @@ const buildContinuityFacts = ({ storyBible, retrievedMemory }) => [
   ...retrievedMemory.map((item) => item.text || item.content),
 ].filter((fact) => typeof fact === 'string' && fact.trim());
 
+const detectMemoryConflicts = (facts = []) => {
+  const normalizedFacts = facts
+    .filter((fact) => typeof fact === 'string' && fact.trim())
+    .map((fact) => fact.trim());
+  const warnings = [];
+  const hasCannotSwim = normalizedFacts.find((fact) => /\bcannot swim\b|\bcan't swim\b/i.test(fact));
+  const hasExpertSwimmer = normalizedFacts.find((fact) => /\bexpert swimmer\b|\bcan swim\b|\bstrong swimmer\b/i.test(fact));
+  const destroyedFacts = normalizedFacts.filter((fact) => /\b(?:is|was)\s+destroyed\b/i.test(fact));
+
+  if (hasCannotSwim && hasExpertSwimmer) {
+    warnings.push({
+      type: 'Character Trait Memory Conflict',
+      facts: [hasCannotSwim, hasExpertSwimmer],
+      reason: 'Retrieved memory contains both cannot-swim and can-swim facts.',
+    });
+  }
+
+  for (const destroyedFact of destroyedFacts) {
+    const subject = destroyedFact.replace(/\b(?:is|was)\s+destroyed\b.*$/i, '').trim();
+    if (!subject) continue;
+
+    const presentFact = normalizedFacts.find((fact) =>
+      fact !== destroyedFact &&
+      new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(fact) &&
+      /\b(?:exists|appears|returns|is present|wields|uses)\b/i.test(fact)
+    );
+
+    if (presentFact) {
+      warnings.push({
+        type: 'Object State Memory Conflict',
+        facts: [destroyedFact, presentFact],
+        reason: `${subject} is both destroyed and later present in retrieved memory.`,
+      });
+    }
+  }
+
+  return warnings;
+};
+
 const validateSceneWithRetries = async ({
   storyBible,
   researchNotes,
@@ -128,6 +190,26 @@ const validateSceneWithRetries = async ({
 }) => {
   let previousAttempt = '';
   let continuityFeedback = null;
+  let lastGenerated = null;
+  let lastAnalysis = null;
+  const retrievedFacts = buildContinuityFacts({ storyBible, retrievedMemory });
+  const memoryConflictWarning = detectMemoryConflicts(retrievedFacts);
+
+  await logSceneDebug({
+    action: 'Scene validation started',
+    metadata: {
+      storyId: storyBible.story.id,
+      selectedPath,
+      storyBible: summarizeForLog({
+        characters: storyBible.characters,
+        locations: storyBible.locations,
+        worldRules: storyBible.worldRules,
+        relationships: storyBible.relationships,
+      }),
+      retrievedFacts: summarizeForLog(retrievedFacts),
+      memoryConflictWarning,
+    },
+  });
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const generated = await expandScenePath({
@@ -140,10 +222,25 @@ const validateSceneWithRetries = async ({
       previousAttempt,
       continuityFeedback,
     });
-    const retrievedFacts = buildContinuityFacts({ storyBible, retrievedMemory });
     const analysis = await runContinuityAgent({
       scene: generated.scene,
       retrievedFacts,
+    });
+    lastGenerated = generated;
+    lastAnalysis = analysis;
+
+    await logSceneDebug({
+      action: `Scene validation attempt ${attempt + 1}`,
+      status: analysis.contradiction ? 'failed' : 'completed',
+      metadata: {
+        storyId: storyBible.story.id,
+        selectedPath,
+        attempt: attempt + 1,
+        generatedScene: summarizeForLog(generated.scene),
+        continuityResponse: analysis,
+        retryReason: analysis.contradiction ? analysis.reason || analysis.type : null,
+        memoryConflictWarning,
+      },
     });
 
     if (!analysis.contradiction) {
@@ -151,6 +248,8 @@ const validateSceneWithRetries = async ({
         ...generated,
         validation: analysis,
         attempts: attempt + 1,
+        continuityWarning: null,
+        memoryConflictWarning,
       };
     }
 
@@ -158,10 +257,33 @@ const validateSceneWithRetries = async ({
     continuityFeedback = analysis;
   }
 
-  const error = new Error('Unable to generate a continuity-safe scene after 2 retries.');
-  error.statusCode = 409;
-  error.details = continuityFeedback;
-  throw error;
+  await logSceneDebug({
+    action: 'Scene validation returned with warning after maximum retries',
+    status: 'failed',
+    metadata: {
+      storyId: storyBible.story.id,
+      selectedPath,
+      finalFailureReason: lastAnalysis?.reason || lastAnalysis?.type || 'Continuity validation failed.',
+      continuityResponse: lastAnalysis,
+      generatedScene: summarizeForLog(lastGenerated?.scene || previousAttempt),
+      memoryConflictWarning,
+    },
+  });
+
+  return {
+    ...(lastGenerated || { scene: previousAttempt, confidence: 50 }),
+    validation: lastAnalysis,
+    attempts: 3,
+    continuityWarning: lastAnalysis?.contradiction
+      ? {
+          contradiction: true,
+          reason: lastAnalysis.reason || lastAnalysis.type || 'Continuity validation warning.',
+          confidence: lastAnalysis.confidence || 0,
+          type: lastAnalysis.type || 'Continuity Warning',
+        }
+      : null,
+    memoryConflictWarning,
+  };
 };
 
 export const generateSceneForStory = async (storyId, provider = 'openai') => {
@@ -238,7 +360,7 @@ export const expandSceneForStory = async ({ storyId, selectedPath, provider = 'o
     selectedPath: selectedPath.trim(),
     generatedScene: validated.scene,
     confidence: validated.confidence,
-    validationStatus: 'validated',
+    validationStatus: validated.continuityWarning ? 'warning' : 'validated',
   });
 
   return {
@@ -249,6 +371,8 @@ export const expandSceneForStory = async ({ storyId, selectedPath, provider = 'o
     confidence: validated.confidence,
     validation: validated.validation,
     attempts: validated.attempts,
+    continuityWarning: validated.continuityWarning,
+    memoryConflictWarning: validated.memoryConflictWarning,
     savedScene,
   };
 };

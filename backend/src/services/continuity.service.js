@@ -36,6 +36,12 @@ const mapContinuityCheck = (row) => ({
 });
 
 const saveContinuityCheck = async ({ storyId, scene, retrievedFacts, analysis, scanTimeMs }) => {
+  const normalizedStoryId =
+    storyId === null || storyId === undefined || storyId === ''
+      ? null
+      : Number.isInteger(Number(storyId))
+        ? Number(storyId)
+        : null;
   const result = await query(
     `
       INSERT INTO continuity_checks (
@@ -53,7 +59,7 @@ const saveContinuityCheck = async ({ storyId, scene, retrievedFacts, analysis, s
       RETURNING id, story_id, scene, contradiction, conflict_type, reason, confidence, retrieved_facts, status, scan_time_ms, created_at, updated_at;
     `,
     [
-      Number.isInteger(Number(storyId)) ? Number(storyId) : null,
+      normalizedStoryId,
       scene,
       Boolean(analysis.contradiction),
       analysis.type || 'None',
@@ -99,9 +105,12 @@ export const checkContinuity = async (scene, knownFacts = [], storyId = null) =>
     context = fallbackContext();
   }
 
-  const retrievedFacts = context
+  const retrievedFacts = [
+    ...normalizedKnownFacts,
+    ...context
     .map((item) => item.content)
-    .filter((content) => typeof content === 'string' && content.trim().length > 0);
+    .filter((content) => typeof content === 'string' && content.trim().length > 0),
+  ].filter((fact, index, facts) => facts.findIndex((candidate) => candidate.toLowerCase() === fact.toLowerCase()) === index);
   const analysis = await runContinuityAgent({
     scene: normalizedScene,
     retrievedFacts,
@@ -143,6 +152,9 @@ export const listContinuityChecks = async ({ status = 'history', limit = 100 } =
   if (status && status !== 'history') {
     values.push(status);
     filters.push(`status = $${values.length}`);
+    if (status === 'active') {
+      filters.push('contradiction = TRUE');
+    }
   }
 
   values.push(safeLimit);

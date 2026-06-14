@@ -49,7 +49,7 @@ const getContinuityMetrics = async () => {
     SELECT
       COUNT(*)::INTEGER AS total_checks,
       COUNT(*) FILTER (WHERE contradiction = TRUE)::INTEGER AS contradictions,
-      COUNT(*) FILTER (WHERE status = 'active')::INTEGER AS active,
+      COUNT(*) FILTER (WHERE status = 'active' AND contradiction = TRUE)::INTEGER AS active,
       COUNT(*) FILTER (WHERE status = 'ignored')::INTEGER AS ignored,
       COUNT(*) FILTER (WHERE status = 'resolved')::INTEGER AS resolved,
       COALESCE(AVG(confidence), 0)::NUMERIC(10, 2) AS average_confidence,
@@ -80,6 +80,32 @@ const getStoryBibleCoverage = async () => {
       (SELECT COUNT(*) FROM relationships)::INTEGER AS relationships,
       (SELECT COUNT(*) FROM story_assets WHERE saved_to_story_bible = TRUE)::INTEGER AS saved_assets
   `);
+  const coverageStats = await getOne(`
+    WITH per_story AS (
+      SELECT
+        s.id,
+        COUNT(DISTINCT c.id) AS character_count,
+        COUNT(DISTINCT l.id) AS location_count,
+        COUNT(DISTINCT wr.id) AS rule_count,
+        COUNT(DISTINCT r.id) AS relationship_count
+      FROM stories s
+      LEFT JOIN characters c ON c.story_id = s.id
+      LEFT JOIN locations l ON l.story_id = s.id
+      LEFT JOIN world_rules wr ON wr.story_id = s.id
+      LEFT JOIN relationships r ON r.story_id = s.id
+      GROUP BY s.id
+    )
+    SELECT
+      COALESCE(AVG(
+        (
+          CASE WHEN character_count > 0 THEN 1 ELSE 0 END +
+          CASE WHEN location_count > 0 THEN 1 ELSE 0 END +
+          CASE WHEN rule_count > 0 THEN 1 ELSE 0 END +
+          CASE WHEN relationship_count > 0 THEN 1 ELSE 0 END
+        ) / 4.0
+      ) * 100, 0)::NUMERIC(10, 2) AS coverage_score
+    FROM per_story;
+  `);
   const stories = Number(stats.stories || 0);
   const entityTotal =
     Number(stats.characters || 0) +
@@ -87,10 +113,9 @@ const getStoryBibleCoverage = async () => {
     Number(stats.world_rules || 0) +
     Number(stats.relationships || 0) +
     Number(stats.saved_assets || 0);
-  const targetPerStory = 8;
 
   return {
-    score: stories ? clamp((entityTotal / (stories * targetPerStory)) * 100) : 0,
+    score: stories ? clamp(Number(coverageStats.coverage_score || 0)) : 0,
     stories,
     characters: Number(stats.characters || 0),
     locations: Number(stats.locations || 0),

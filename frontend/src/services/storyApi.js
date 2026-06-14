@@ -38,13 +38,13 @@ export const uploadStory = async ({ title, content }) => {
   return parseResponse(response);
 };
 
-export const checkContinuity = async (scene, knownFacts = []) => {
+export const checkContinuity = async (scene, knownFacts = [], storyId = null) => {
   const response = await fetch(`${API_BASE_URL}/api/continuity/check`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ scene, knownFacts }),
+    body: JSON.stringify({ scene, knownFacts, storyId }),
   });
 
   return parseResponse(response);

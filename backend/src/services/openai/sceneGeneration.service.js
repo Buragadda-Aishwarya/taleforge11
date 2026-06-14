@@ -178,6 +178,11 @@ Selected Path:
 Continuity Feedback:
 ${JSON.stringify(continuityFeedback || null, null, 2)}
 
+Correction Instructions:
+${continuityFeedback?.contradiction
+  ? `The previous attempt failed continuity validation. Violation: "${continuityFeedback.reason || continuityFeedback.type}". Generate a corrected scene that directly respects this fact. Do not repeat the violating action, relationship, timeline event, or world-rule break.`
+  : 'No prior continuity violation. Maintain existing canon.'}
+
 Previous Attempt To Avoid:
 """${previousAttempt || ''}"""
 

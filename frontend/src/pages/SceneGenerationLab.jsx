@@ -149,6 +149,31 @@ export default function SceneGenerationLab() {
             <div className="max-h-[520px] overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/35 p-5 font-inter text-sm leading-7 text-zinc-200">
               {expandedScene.scene}
             </div>
+            {expandedScene.continuityWarning && (
+              <div className="mt-5 rounded-xl border border-tf-error/30 bg-tf-error/10 p-4">
+                <p className="font-mono text-[11px] uppercase tracking-widest text-tf-error">
+                  Continuity Warning
+                </p>
+                <p className="mt-2 text-sm leading-6 text-zinc-200">
+                  {expandedScene.continuityWarning.reason}
+                </p>
+                <p className="mt-2 font-mono text-xs text-zinc-400">
+                  Confidence {expandedScene.continuityWarning.confidence}%
+                </p>
+              </div>
+            )}
+            {Array.isArray(expandedScene.memoryConflictWarning) && expandedScene.memoryConflictWarning.length > 0 && (
+              <div className="mt-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4">
+                <p className="font-mono text-[11px] uppercase tracking-widest text-yellow-200">
+                  Memory Conflict Warning
+                </p>
+                <div className="mt-2 space-y-2 text-sm leading-6 text-zinc-200">
+                  {expandedScene.memoryConflictWarning.map((warning, index) => (
+                    <p key={`${warning.type}-${index}`}>{warning.reason}</p>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 

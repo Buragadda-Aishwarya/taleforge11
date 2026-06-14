@@ -50,6 +50,9 @@ const getStoriesCollection = () => {
           return generateEmbedding(text);
         },
       },
+    }).catch((error) => {
+      storiesCollectionPromise = null;
+      throw error;
     });
   }
 
@@ -64,6 +67,9 @@ const getMemoryCollection = () => {
         service: 'taleforge-ai',
         entity: 'story_memory',
       },
+    }).catch((error) => {
+      memoryCollectionPromise = null;
+      throw error;
     });
   }
 

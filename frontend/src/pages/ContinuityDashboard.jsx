@@ -46,16 +46,20 @@ export default function ContinuityDashboard() {
   const [scanTime, setScanTime] = useState(0)
 
   const storyBible = latestUpload?.uploadResult?.storyBible
+  const storyId = latestUpload?.uploadResult?.story?.id || null
   const knownFacts = getKnownFactsFromStoryBible(storyBible)
   const factsTracked =
     (storyBible?.characters?.length || 0) +
     (storyBible?.locations?.length || 0) +
     (storyBible?.worldRules?.length || 0)
   const conflictsFound = continuityChecks.filter((check) => check.contradiction).length
-  const activeCount = continuityChecks.filter((check) => check.status === 'active').length
+  const activeCount = continuityChecks.filter((check) => check.status === 'active' && check.contradiction).length
   const ignoredCount = continuityChecks.filter((check) => check.status === 'ignored').length
   const resolvedCount = continuityChecks.filter((check) => check.status === 'resolved').length
-  const filteredChecks = continuityChecks.filter((check) => filter === 'history' || check.status === filter)
+  const filteredChecks = continuityChecks.filter((check) =>
+    filter === 'history' ||
+    (filter === 'active' ? check.status === 'active' && check.contradiction : check.status === filter)
+  )
 
   const stats = [
     { label: 'Facts Tracked', value: `${factsTracked}`, icon: Shield, color: 'text-secondary' },
@@ -66,7 +70,7 @@ export default function ContinuityDashboard() {
 
   const loadChecks = async (status = filter) => {
     try {
-      const payload = await getContinuityChecks({ status: status || 'history', limit: 200 })
+      const payload = await getContinuityChecks({ status: 'history', limit: 200 })
       setContinuityChecks(payload.checks || [])
       if (!payload.checks?.length) {
         setSelectedConflict(null)
@@ -90,7 +94,7 @@ export default function ContinuityDashboard() {
     const startedAt = performance.now()
 
     try {
-      const result = await checkContinuity(normalizedScene, knownFacts)
+      const result = await checkContinuity(normalizedScene, knownFacts, storyId)
       const elapsed = Math.max(1, Math.round(performance.now() - startedAt))
       const savedCheck = result.savedCheck || {
         ...result,
@@ -105,7 +109,7 @@ export default function ContinuityDashboard() {
       setContinuityResult(result)
       setSelectedConflict(selected)
       setScanTime(result.scanTimeMs || elapsed)
-      await loadChecks(filter)
+      await loadChecks('history')
     } catch (error) {
       setCheckError(error.message || 'Continuity check failed.')
     } finally {
@@ -119,7 +123,7 @@ export default function ContinuityDashboard() {
     try {
       const payload = await updateContinuityCheckStatus(selectedConflict.id, status)
       const updated = payload.check || { ...selectedConflict, status }
-      await loadChecks(filter)
+      await loadChecks('history')
 
       if (filter !== 'history' && updated.status !== filter) {
         setSelectedConflict(null)
