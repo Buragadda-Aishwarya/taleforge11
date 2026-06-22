@@ -235,14 +235,14 @@ const loadGraphRecords = async (storyId) => {
     continuityChecks,
   ] = await Promise.all([
     query('SELECT id, title, content, created_at, updated_at FROM stories WHERE id = $1', [storyId]),
-    query('SELECT id, story_id, name, description, created_at, updated_at FROM characters WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
-    query('SELECT id, story_id, name, description, created_at, updated_at FROM locations WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
-    query('SELECT id, story_id, rule, category, created_at, updated_at FROM world_rules WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
+    query('SELECT id, story_id, name, description, created_at, updated_at FROM characters WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, story_id, name, description, created_at, updated_at FROM locations WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, story_id, rule, category, created_at, updated_at FROM world_rules WHERE story_id = $1 ORDER BY id ASC', [storyId]),
     query('SELECT id, story_id, source, target, relation, created_at FROM relationships WHERE story_id = $1 ORDER BY id ASC', [storyId]),
-    query('SELECT id, story_id, query, executive_summary, summary, technologies, historical_evolution, story_opportunities, created_at FROM research_entries WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
-    query('SELECT id, research_entry_id, story_id, label, type, description, parent_label, created_at FROM contextual_nodes WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
-    query('SELECT id, research_entry_id, story_id, title, category, trust_score, url, created_at FROM research_sources WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
-    query('SELECT id, research_entry_id, story_id, asset_type, name, description, payload, created_at FROM story_assets WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
+    query('SELECT id, story_id, query, executive_summary, summary, technologies, historical_evolution, story_opportunities, created_at FROM research_entries WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, research_entry_id, story_id, label, type, description, parent_label, created_at FROM contextual_nodes WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, research_entry_id, story_id, title, category, trust_score, url, created_at FROM research_sources WHERE story_id = $1 ORDER BY id ASC', [storyId]),
+    query('SELECT id, research_entry_id, story_id, asset_type, name, description, payload, created_at FROM story_assets WHERE story_id = $1 ORDER BY id ASC', [storyId]),
     query(
       `
         SELECT id, story_id, path_title, path_summary, impact, risk_level,

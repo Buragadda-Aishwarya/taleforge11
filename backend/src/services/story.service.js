@@ -20,6 +20,11 @@ const extractFallbackCharacterNames = (content) => {
     'As',
     'At',
     'But',
+    'Captain',
+    'Chief',
+    'Commander',
+    'Doctor',
+    'Dr',
     'Finally',
     'First',
     'From',
@@ -30,10 +35,19 @@ const extractFallbackCharacterNames = (content) => {
     'However',
     'In',
     'It',
+    'King',
+    'Lady',
     'Later',
+    'Lord',
     'Meanwhile',
+    'Mr',
+    'Mrs',
+    'Ms',
     'One',
     'People',
+    'Prince',
+    'Princess',
+    'Queen',
     'She',
     'Suddenly',
     'Together',
@@ -45,6 +59,7 @@ const extractFallbackCharacterNames = (content) => {
     'Worried',
     'With',
   ]);
+  const genericNames = new Set(['Boy', 'Girl', 'Hero', 'Man', 'Narrator', 'Person', 'Protagonist', 'Traveler', 'Woman']);
   const nameCounts = new Map();
   const patterns = [
     /\b(?:named|called|known as)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
@@ -55,7 +70,16 @@ const extractFallbackCharacterNames = (content) => {
   for (const pattern of patterns) {
     for (const match of content.matchAll(pattern)) {
       const name = match[1].replace(/^the\s+/i, '').trim();
-      if (!name || stopWords.has(name) || stopWords.has(name.split(/\s+/)[0])) continue;
+      const words = name.split(/\s+/).filter(Boolean);
+      if (
+        !name ||
+        stopWords.has(name) ||
+        genericNames.has(name) ||
+        words.every((word) => stopWords.has(word) || genericNames.has(word)) ||
+        !/^[A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)*$/.test(name)
+      ) {
+        continue;
+      }
       nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
     }
   }
@@ -309,8 +333,28 @@ const persistStoryBible = async ({ storyId, storyBible, relationships }) => {
 
 export const uploadStoryWithIngestion = async ({ title, content }) => {
   const story = await createStory({ title, content });
+  const processingStages = [
+    { key: 'storyUpload', label: 'Story Upload', status: 'completed' },
+    { key: 'storyBibleGeneration', label: 'Story Bible Generation', status: 'processing' },
+    { key: 'knowledgeExtraction', label: 'Knowledge Extraction', status: 'processing' },
+    { key: 'chromaDbMemoryCreation', label: 'ChromaDB Memory Creation', status: 'processing' },
+    { key: 'knowledgeGraphUpdate', label: 'Knowledge Graph Update', status: 'processing' },
+    { key: 'continuityAnalysis', label: 'Continuity Analysis', status: 'processing' },
+    { key: 'researchProcessing', label: 'Research Processing', status: 'processing' },
+    { key: 'sceneGenerationPreparation', label: 'Scene Generation Preparation', status: 'processing' },
+  ];
+  const setStage = (key, status, message = '') => {
+    const stage = processingStages.find((item) => item.key === key);
+    if (stage) {
+      stage.status = status;
+      if (message) stage.message = message;
+    }
+  };
+
   const storyBible = await generateStoryBibleFromText(content);
+  setStage('storyBibleGeneration', 'completed');
   const relationships = await extractRelationships(content, storyBible);
+  setStage('knowledgeExtraction', 'completed');
   let persistedStoryBible;
 
   try {
@@ -319,9 +363,14 @@ export const uploadStoryWithIngestion = async ({ title, content }) => {
       storyBible,
       relationships,
     });
+    setStage('knowledgeGraphUpdate', 'completed');
+    setStage('continuityAnalysis', 'completed');
+    setStage('researchProcessing', 'completed');
+    setStage('sceneGenerationPreparation', 'completed');
   } catch (error) {
     console.warn('Story Bible persistence failed. Upload will continue.');
     console.warn(error.message || error);
+    setStage('knowledgeGraphUpdate', 'failed', error.message || 'Story Bible persistence failed.');
     persistedStoryBible = {
       characters: [],
       locations: [],
@@ -331,6 +380,9 @@ export const uploadStoryWithIngestion = async ({ title, content }) => {
       persisted: false,
       reason: error.message || 'Story Bible persistence failed.',
     };
+    setStage('continuityAnalysis', 'completed');
+    setStage('researchProcessing', 'completed');
+    setStage('sceneGenerationPreparation', 'completed');
   }
 
   const chunks = splitStoryIntoChunks(content);
@@ -355,16 +407,30 @@ export const uploadStoryWithIngestion = async ({ title, content }) => {
         status: 'indexed',
         ...(await addStoryChunks(story.id, chunksWithEmbeddings)),
       };
+      setStage('chromaDbMemoryCreation', 'completed');
     } catch (error) {
       console.warn('Chroma vector indexing failed. Upload will continue without vector index.');
       console.warn(error.message || error);
+      setStage(
+        'chromaDbMemoryCreation',
+        'warning',
+        'ChromaDB is not reachable. Story processing completed, but vector memory was skipped. Start ChromaDB on http://localhost:8000 and reprocess this story to index memory.'
+      );
       vectorIndex = {
         status: 'unavailable',
         reason: error.message || 'Chroma vector indexing failed.',
         chunksAdded: 0,
       };
     }
+  } else {
+    setStage('chromaDbMemoryCreation', 'warning', 'No story chunks were generated for vector memory.');
   }
+
+  const graphReady = Boolean(persistedStoryBible.persisted);
+  const continuityReady = Boolean(storyBible);
+  const researchReady = Boolean(storyBible);
+  const sceneGenerationReady = Boolean(storyBible && story?.id);
+  const hasFailedStage = processingStages.some((stage) => stage.status === 'failed');
 
   return {
     story,
@@ -373,5 +439,13 @@ export const uploadStoryWithIngestion = async ({ title, content }) => {
     persistedStoryBible,
     chunks,
     vectorIndex,
+    processingStatus: {
+      status: hasFailedStage ? 'completed_with_warnings' : 'completed',
+      stages: processingStages,
+    },
+    graphReady,
+    continuityReady,
+    researchReady,
+    sceneGenerationReady,
   };
 };

@@ -5,28 +5,27 @@ import { NeuralFeedCard } from '@/components/NeuralFeedCard';
 import { RelationshipGraph } from '@/components/RelationshipGraph';
 import { CharacterProfileCard } from '@/components/CharacterProfileCard';
 import { NewCharacterCard } from '@/components/NewCharacterCard';
-import { storyBibleData } from '@/data/storyBibleData';
 import { clearLatestStoryBible, loadLatestStoryBible } from '@/services/storyApi';
 
-const fallbackImages = storyBibleData.characterPreview.images;
+const fallbackImages = [];
 
 const toGeneratedGraph = (characters) => {
   const first = characters[0];
   const second = characters[1] || characters[0];
 
   if (!first) {
-    return storyBibleData.graphData;
+    return null;
   }
 
   return {
     focus: characters.length > 1 ? `${first.name} & ${second.name}` : first.name,
     node1: {
       name: first.name,
-      image: storyBibleData.graphData.node1.image,
+      image: '',
     },
     node2: {
       name: second.name,
-      image: storyBibleData.graphData.node2.image,
+      image: '',
     },
     relationship: first.relationships?.[0] || 'ENTITY',
   };
@@ -51,7 +50,7 @@ const toGeneratedCharacterCard = (character) => ({
   ],
   goal: character?.role || character?.description || 'Narrative function pending review.',
   images: fallbackImages,
-  collaborators: storyBibleData.characterPreview.collaborators,
+  collaborators: [],
   collaboratorCount: Math.max(0, (character?.relationships || []).length),
 });
 
@@ -95,7 +94,7 @@ export default function StoryBible() {
 
   const feed = useMemo(() => {
     if (!hasGeneratedBible) {
-      return storyBibleData.feed;
+      return [];
     }
 
     return [
@@ -120,7 +119,7 @@ export default function StoryBible() {
 
   const graphData = useMemo(() => toGeneratedGraph(characters), [characters]);
   const characterPreview = useMemo(
-    () => (characters[0] ? toGeneratedCharacterCard(characters[0]) : storyBibleData.characterPreview),
+    () => (characters[0] ? toGeneratedCharacterCard(characters[0]) : null),
     [characters]
   );
 
@@ -144,7 +143,7 @@ export default function StoryBible() {
             <p className="font-inter text-base text-on-surface-variant leading-relaxed">
               {hasGeneratedBible
                 ? 'Generated from your latest upload. Review the extracted characters, locations, and world rules before saving them.'
-                : 'Deep cognitive mapping of story entities, relationships, lore, and narrative consistency. Your AI co-pilot has identified critical updates.'}
+                : 'Upload a story to generate a Story Bible.'}
             </p>
           </div>
           
@@ -181,13 +180,24 @@ export default function StoryBible() {
           {/* Main Visuals & Cards */}
           <div className="lg:col-span-9 space-y-6 lg:space-y-8 flex flex-col">
              {/* Graph View */}
-            <RelationshipGraph data={graphData} />
+            {graphData ? (
+              <RelationshipGraph data={graphData} />
+            ) : (
+              <div className="glass-panel rounded-xl border border-white/10 bg-surface-container-lowest/50 p-8 text-center">
+                <h2 className="font-sora text-xl font-semibold text-on-surface">No Story Bible Yet</h2>
+                <p className="mt-2 font-inter text-sm text-on-surface-variant">
+                  Upload a story to generate characters, locations, timeline events, and world rules.
+                </p>
+              </div>
+            )}
             
             {/* Entity Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-              <CharacterProfileCard data={characterPreview} />
-              <NewCharacterCard />
-            </div>
+            {hasGeneratedBible && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+                {characterPreview && <CharacterProfileCard data={characterPreview} />}
+                <NewCharacterCard />
+              </div>
+            )}
 
             {hasGeneratedBible && (
               <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 lg:gap-8">

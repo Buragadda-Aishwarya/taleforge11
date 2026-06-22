@@ -232,5 +232,23 @@ export const saveResearchToStoryBible = async ({ storyId, research }) => {
     storyAssets,
     memoryEntries,
     warnings,
+    processingStatus: {
+      status: warnings.length ? 'completed_with_warnings' : 'completed',
+      stages: [
+        { key: 'researchProcessing', label: 'Research Processing', status: 'completed' },
+        { key: 'storyBibleGeneration', label: 'Story Bible Update', status: 'completed' },
+        {
+          key: 'chromaDbMemoryCreation',
+          label: 'ChromaDB Memory Creation',
+          status: warnings.length ? 'warning' : 'completed',
+          message: warnings.join(' '),
+        },
+        { key: 'knowledgeGraphUpdate', label: 'Knowledge Graph Update', status: 'completed' },
+      ],
+    },
+    graphReady: true,
+    continuityReady: true,
+    researchReady: true,
+    sceneGenerationReady: true,
   };
 };

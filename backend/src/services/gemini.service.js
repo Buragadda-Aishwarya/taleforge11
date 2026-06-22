@@ -28,6 +28,11 @@ export const normalizeStoryBible = (storyBible = {}, storyContent = '') => {
     'as',
     'at',
     'but',
+    'captain',
+    'chief',
+    'commander',
+    'doctor',
+    'dr',
     'finally',
     'first',
     'from',
@@ -39,10 +44,19 @@ export const normalizeStoryBible = (storyBible = {}, storyContent = '') => {
     'i',
     'in',
     'it',
+    'king',
+    'lady',
     'later',
+    'lord',
     'meanwhile',
+    'mr',
+    'mrs',
+    'ms',
     'one',
     'people',
+    'prince',
+    'princess',
+    'queen',
     'she',
     'suddenly',
     'together',
@@ -53,6 +67,17 @@ export const normalizeStoryBible = (storyBible = {}, storyContent = '') => {
     'villain',
     'worried',
     'with',
+  ]);
+  const genericCharacterWords = new Set([
+    'boy',
+    'girl',
+    'hero',
+    'man',
+    'narrator',
+    'person',
+    'protagonist',
+    'traveler',
+    'woman',
   ]);
   const forbiddenLocationNames = new Set(['the', 'finally', 'then', 'one', 'a', 'an']);
 
@@ -67,6 +92,31 @@ export const normalizeStoryBible = (storyBible = {}, storyContent = '') => {
       .replace(/^the\s+/i, '')
       .replace(/\s+/g, ' ')
       .trim();
+
+  const isLikelyCharacterName = (name) => {
+    const cleaned = cleanName(name);
+    const key = cleaned.toLowerCase();
+    const words = cleaned.split(/\s+/).filter(Boolean);
+
+    if (
+      cleaned.length < 2 ||
+      forbiddenCharacterNames.has(key) ||
+      genericCharacterWords.has(key) ||
+      /^\d+$/.test(cleaned)
+    ) {
+      return false;
+    }
+
+    if (words.every((word) => forbiddenCharacterNames.has(word.toLowerCase()) || genericCharacterWords.has(word.toLowerCase()))) {
+      return false;
+    }
+
+    if (!/^[A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)*$/.test(cleaned)) {
+      return false;
+    }
+
+    return isMentioned(cleaned);
+  };
 
   const dedupeByName = (items) => {
     const seen = new Set();
@@ -88,13 +138,7 @@ export const normalizeStoryBible = (storyBible = {}, storyContent = '') => {
         : [],
     }))
     .filter((character) => {
-      const key = character.name.toLowerCase();
-      return (
-        character.name.length >= 2 &&
-        !forbiddenCharacterNames.has(key) &&
-        !/^\d+$/.test(character.name) &&
-        isMentioned(character.name)
-      );
+      return isLikelyCharacterName(character.name);
     });
 
   const locations = dedupeByName(Array.isArray(storyBible.locations) ? storyBible.locations : [])

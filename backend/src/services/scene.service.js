@@ -56,14 +56,14 @@ const loadStoryBible = async (storyId) => {
   ] = await Promise.all([
     query('SELECT id, name, description FROM characters WHERE story_id = $1 ORDER BY id ASC', [storyId]),
     query('SELECT id, name, description FROM locations WHERE story_id = $1 ORDER BY id ASC', [storyId]),
-    query('SELECT id, rule, category FROM world_rules WHERE story_id = $1 OR story_id IS NULL ORDER BY id ASC', [storyId]),
+    query('SELECT id, rule, category FROM world_rules WHERE story_id = $1 ORDER BY id ASC', [storyId]),
     query('SELECT id, source, target, relation FROM relationships WHERE story_id = $1 ORDER BY id ASC', [storyId]),
     query(
       `
         SELECT id, query, executive_summary, summary, key_findings, technologies,
           challenges, opportunities, historical_evolution, story_opportunities
         FROM research_entries
-        WHERE story_id = $1 OR story_id IS NULL
+        WHERE story_id = $1
         ORDER BY id DESC
         LIMIT 12
       `,
@@ -325,6 +325,17 @@ export const generateSceneForStory = async (storyId, provider = 'openai') => {
     latestChapter,
     paths: sceneGeneration.paths,
     savedPaths,
+    processingStatus: {
+      status: 'completed',
+      stages: [
+        { key: 'sceneGenerationPreparation', label: 'Scene Generation Preparation', status: 'completed' },
+        { key: 'knowledgeGraphUpdate', label: 'Knowledge Graph Update', status: 'completed' },
+      ],
+    },
+    graphReady: true,
+    continuityReady: true,
+    researchReady: true,
+    sceneGenerationReady: true,
   };
 };
 
@@ -374,5 +385,22 @@ export const expandSceneForStory = async ({ storyId, selectedPath, provider = 'o
     continuityWarning: validated.continuityWarning,
     memoryConflictWarning: validated.memoryConflictWarning,
     savedScene,
+    processingStatus: {
+      status: validated.continuityWarning ? 'completed_with_warnings' : 'completed',
+      stages: [
+        { key: 'sceneGenerationPreparation', label: 'Scene Generation Preparation', status: 'completed' },
+        {
+          key: 'continuityAnalysis',
+          label: 'Continuity Analysis',
+          status: validated.continuityWarning ? 'failed' : 'completed',
+          message: validated.continuityWarning?.reason || '',
+        },
+        { key: 'knowledgeGraphUpdate', label: 'Knowledge Graph Update', status: 'completed' },
+      ],
+    },
+    graphReady: true,
+    continuityReady: true,
+    researchReady: true,
+    sceneGenerationReady: true,
   };
 };

@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const STORY_BIBLE_STORAGE_KEY = 'taleforge.storyBible.latest';
 const STORY_UPLOAD_STORAGE_KEY = 'taleforge.storyUpload.latest';
+const STORY_UPLOAD_HISTORY_STORAGE_KEY = 'taleforge.storyUploads.history';
 const CONTINUITY_CHECKS_STORAGE_KEY = 'taleforge.continuity.checks';
 
 const parseResponse = async (response) => {
@@ -232,12 +233,20 @@ export const saveLatestStoryBible = ({ storyContent, storyBible }) => {
 
 export const saveLatestStoryUpload = ({ storyContent, uploadResult }) => {
   const record = {
+    id: uploadResult?.story?.id ? `story-${uploadResult.story.id}` : `local-${Date.now()}`,
+    title: uploadResult?.story?.title || storyContent?.slice(0, 80) || 'Untitled Story',
     storyContent,
     uploadResult,
+    processingStatus: uploadResult?.processingStatus || null,
+    graphReady: Boolean(uploadResult?.graphReady),
+    continuityReady: Boolean(uploadResult?.continuityReady),
+    researchReady: Boolean(uploadResult?.researchReady),
+    sceneGenerationReady: Boolean(uploadResult?.sceneGenerationReady),
     generatedAt: new Date().toISOString(),
   };
 
   localStorage.setItem(STORY_UPLOAD_STORAGE_KEY, JSON.stringify(record));
+  saveStoryUploadHistoryRecord(record);
   return record;
 };
 
@@ -251,6 +260,47 @@ export const loadLatestStoryUpload = () => {
     localStorage.removeItem(STORY_UPLOAD_STORAGE_KEY);
     return null;
   }
+};
+
+export const loadStoryUploadHistory = () => {
+  const rawValue = localStorage.getItem(STORY_UPLOAD_HISTORY_STORAGE_KEY);
+  if (!rawValue) return [];
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    localStorage.removeItem(STORY_UPLOAD_HISTORY_STORAGE_KEY);
+    return [];
+  }
+};
+
+export const saveStoryUploadHistoryRecord = (record) => {
+  const existing = loadStoryUploadHistory();
+  const normalizedRecord = {
+    ...record,
+    id: record.id || `local-${Date.now()}`,
+    generatedAt: record.generatedAt || new Date().toISOString(),
+  };
+  const nextHistory = [
+    normalizedRecord,
+    ...existing.filter((item) => item.id !== normalizedRecord.id),
+  ].slice(0, 10);
+
+  localStorage.setItem(STORY_UPLOAD_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+  return nextHistory;
+};
+
+export const deleteStoryUploadRecord = (id) => {
+  const nextHistory = loadStoryUploadHistory().filter((item) => item.id !== id);
+  localStorage.setItem(STORY_UPLOAD_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+
+  const latest = loadLatestStoryUpload();
+  if (latest?.id === id) {
+    localStorage.removeItem(STORY_UPLOAD_STORAGE_KEY);
+  }
+
+  return nextHistory;
 };
 
 export const loadContinuityChecks = () => {

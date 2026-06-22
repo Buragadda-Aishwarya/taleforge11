@@ -19,7 +19,6 @@ import {
   getStoryGraph,
   loadLatestStoryUpload,
 } from '@/services/storyApi';
-import { initialEdges, initialNodes } from '@/data/graphData';
 import {
   ChevronDown,
   ChevronRight,
@@ -92,24 +91,14 @@ const normalizeGraphNode = (node) => ({
     id: node.data?.id || node.id,
     type: node.data?.type || flowTypeToGraphType[node.type] || 'Object',
     fullLabel: node.data?.fullLabel || node.data?.label,
-    source: node.data?.source || 'Sample Graph',
+    source: node.data?.source || 'Story Graph',
     createdAt: node.data?.createdAt || null,
     lastUpdated: node.data?.lastUpdated || node.data?.createdAt || null,
-    generatedBy: node.data?.generatedBy || node.data?.source || 'Sample Graph',
+    generatedBy: node.data?.generatedBy || node.data?.source || 'Story Graph',
     relationships: node.data?.relationships || [],
     connectedNodes: node.data?.connectedNodes || [],
   },
 });
-
-const normalizedInitialNodes = initialNodes.map(normalizeGraphNode);
-const normalizedInitialEdges = initialEdges.map((edge) => ({
-  ...edge,
-  type: 'narrative',
-  data: {
-    relation: edge.label,
-    source: 'Sample Graph',
-  },
-}));
 
 const formatDate = (value) => {
   if (!value) return 'Unknown';
@@ -334,9 +323,9 @@ function GraphControls({ onFit }) {
 }
 
 export default function KnowledgeGraphCanvas() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(normalizedInitialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(normalizedInitialEdges);
-  const [fullGraph, setFullGraph] = useState({ nodes: normalizedInitialNodes, edges: normalizedInitialEdges });
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [fullGraph, setFullGraph] = useState({ nodes: [], edges: [] });
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [mode, setMode] = useState('story');
@@ -345,7 +334,11 @@ export default function KnowledgeGraphCanvas() {
   const [filters, setFilters] = useState(() =>
     Object.fromEntries(filterOptions.map(([type]) => [type, modeConfig.story.types.includes(type)]))
   );
-  const [graphStatus, setGraphStatus] = useState({ loading: false, error: '', title: 'Sample Knowledge Graph' });
+  const [graphStatus, setGraphStatus] = useState({
+    loading: false,
+    error: '',
+    title: 'Upload a story to generate a Knowledge Graph.',
+  });
 
   useEffect(() => {
     setFilters((prev) => ({
@@ -360,25 +353,42 @@ export default function KnowledgeGraphCanvas() {
     const latestUpload = loadLatestStoryUpload();
     const storyId = latestUpload?.uploadResult?.story?.id;
 
-    if (!storyId || String(storyId).startsWith('local-')) return undefined;
+    setSelectedNodeId(null);
+    setExpandedNodes(new Set());
+
+    if (!storyId || String(storyId).startsWith('local-')) {
+      setFullGraph({ nodes: [], edges: [] });
+      setGraphStatus({
+        loading: false,
+        error: '',
+        title: 'Upload a story to generate a Knowledge Graph.',
+      });
+      return undefined;
+    }
 
     const loadGraph = async () => {
       setGraphStatus((prev) => ({ ...prev, loading: true, error: '' }));
       try {
         const graph = await getStoryGraph(storyId);
         if (!mounted) return;
-        setFullGraph({ nodes: (graph.nodes || []).map(normalizeGraphNode), edges: graph.edges || [] });
+        setFullGraph({
+          nodes: (graph.nodes || []).map(normalizeGraphNode),
+          edges: (graph.edges || []).map((edge) => ({ ...edge, type: edge.type || 'narrative' })),
+        });
         setGraphStatus({
           loading: false,
           error: '',
-          title: graph.story?.title || 'Story Knowledge Graph',
+          title: graph.nodes?.length
+            ? graph.story?.title || 'Story Knowledge Graph'
+            : 'Upload a story to generate a Knowledge Graph.',
         });
       } catch (error) {
         if (!mounted) return;
+        setFullGraph({ nodes: [], edges: [] });
         setGraphStatus({
           loading: false,
           error: error.message || 'Unable to load story graph.',
-          title: 'Sample Knowledge Graph',
+          title: 'Story Knowledge Graph',
         });
       }
     };
@@ -534,6 +544,21 @@ export default function KnowledgeGraphCanvas() {
         <FlowControls showInteractive={false} className="!hidden" />
         <GraphControls onFit={() => reactFlowInstance?.fitView({ duration: 500, padding: 0.2 })} />
       </ReactFlow>
+      {!graphStatus.loading && !nodes.length && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
+          <div className="max-w-md rounded-2xl border border-white/10 bg-black/75 p-8 text-center shadow-2xl backdrop-blur-xl">
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">
+              Knowledge Graph
+            </div>
+            <h2 className="mt-3 font-display text-2xl text-white">
+              Upload a story to generate a Knowledge Graph.
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+              TaleForge will build this map from your Story Bible, saved research, generated scenes, and continuity findings.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

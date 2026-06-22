@@ -2,24 +2,30 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Upload, FileText, CheckCircle2, Circle, Cpu, Network, BookOpen,
-  AlertTriangle, ArrowRight, X
+  AlertTriangle, ArrowRight, X, Eye, RotateCcw, Trash2
 } from 'lucide-react'
 import PageContainer from '../components/layout/PageContainer'
 import {
+  deleteStoryUploadRecord,
   loadLatestStoryUpload,
+  loadStoryUploadHistory,
   runRecruiterDemo,
   saveContinuityCheck,
   saveLatestStoryBible,
   saveLatestStoryUpload,
+  saveStoryUploadHistoryRecord,
   uploadStory,
 } from '../services/storyApi'
 
 const pipelineSteps = [
-  { id: 1, label: 'Text Extraction', desc: 'Parse raw manuscript files', status: 'complete', provider: 'Internal' },
-  { id: 2, label: 'Entity Recognition', desc: 'Extract characters, locations, objects', status: 'complete', provider: 'Gemini' },
-  { id: 3, label: 'Relationship Mapping', desc: 'Build entity connections', status: 'active', provider: 'LangChain' },
-  { id: 4, label: 'Vector Embedding', desc: 'Store in ChromaDB', status: 'pending', provider: 'ChromaDB' },
-  { id: 5, label: 'Story Bible Generation', desc: 'Compile structured knowledge', status: 'pending', provider: 'Internal' },
+  { key: 'storyUpload', id: 1, label: 'Story Upload', desc: 'Receive manuscript text', status: 'pending', provider: 'Internal' },
+  { key: 'storyBibleGeneration', id: 2, label: 'Story Bible Generation', desc: 'Extract structured narrative data', status: 'pending', provider: 'Gemini' },
+  { key: 'knowledgeExtraction', id: 3, label: 'Knowledge Extraction', desc: 'Map entities and relationships', status: 'pending', provider: 'Internal' },
+  { key: 'chromaDbMemoryCreation', id: 4, label: 'ChromaDB Memory Creation', desc: 'Store story memory chunks', status: 'pending', provider: 'ChromaDB' },
+  { key: 'knowledgeGraphUpdate', id: 5, label: 'Knowledge Graph Update', desc: 'Refresh graph nodes and edges', status: 'pending', provider: 'Graph' },
+  { key: 'continuityAnalysis', id: 6, label: 'Continuity Analysis', desc: 'Prepare continuity facts', status: 'pending', provider: 'Groq' },
+  { key: 'researchProcessing', id: 7, label: 'Research Processing', desc: 'Prepare research context', status: 'pending', provider: 'Groq' },
+  { key: 'sceneGenerationPreparation', id: 8, label: 'Scene Generation Preparation', desc: 'Prepare scene generation context', status: 'pending', provider: 'OpenAI' },
 ]
 
 const analysisItems = [
@@ -36,6 +42,11 @@ const characterStopWords = new Set([
   'As',
   'At',
   'But',
+  'Captain',
+  'Chief',
+  'Commander',
+  'Doctor',
+  'Dr',
   'Finally',
   'First',
   'He',
@@ -44,9 +55,18 @@ const characterStopWords = new Set([
   'However',
   'In',
   'It',
+  'King',
+  'Lady',
   'Later',
+  'Lord',
   'Meanwhile',
+  'Mr',
+  'Mrs',
+  'Ms',
   'One',
+  'Prince',
+  'Princess',
+  'Queen',
   'She',
   'Suddenly',
   'The',
@@ -56,6 +76,7 @@ const characterStopWords = new Set([
   'Villain',
   'With',
 ])
+const genericCharacterWords = new Set(['Boy', 'Girl', 'Hero', 'Man', 'Narrator', 'Person', 'Protagonist', 'Traveler', 'Woman'])
 
 const getPreviewCharacterCount = (source) => {
   const names = new Set()
@@ -68,8 +89,14 @@ const getPreviewCharacterCount = (source) => {
   patterns.forEach((pattern) => {
     for (const match of source.matchAll(pattern)) {
       const name = match[1].replace(/^the\s+/i, '').trim()
-      const firstWord = name.split(/\s+/)[0]
-      if (name && !characterStopWords.has(name) && !characterStopWords.has(firstWord)) {
+      const words = name.split(/\s+/).filter(Boolean)
+      if (
+        name &&
+        !characterStopWords.has(name) &&
+        !genericCharacterWords.has(name) &&
+        !words.every((word) => characterStopWords.has(word) || genericCharacterWords.has(word)) &&
+        /^[A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)*$/.test(name)
+      ) {
         names.add(name.toLowerCase())
       }
     }
@@ -116,8 +143,9 @@ export default function IngestionHub() {
   const [processed, setProcessed] = useState(false)
   const [processError, setProcessError] = useState('')
   const [latestUpload, setLatestUpload] = useState(() => loadLatestStoryUpload())
+  const [uploadHistory, setUploadHistory] = useState(() => loadStoryUploadHistory())
 
-  const normalizeText = (text) => text.replace(/\s+/g, ' ').trim()
+  const normalizeText = (text = '') => String(text || '').replace(/\s+/g, ' ').trim()
   const getSourceText = () => normalizeText(storyDraft) || normalizeText(uploadedText)
 
   const getAnalysisItems = () => {
@@ -157,15 +185,15 @@ export default function IngestionHub() {
     const isCurrentProcessedStory = Boolean(uploadResult && source && latestSource === source)
 
     if (isCurrentProcessedStory) {
-      const vectorIndexed = uploadResult.vectorIndex?.status === 'indexed'
-
-      return [
-        { id: 1, label: 'Text Extraction', desc: 'Parsed uploaded story text', status: 'complete', provider: 'Internal' },
-        { id: 2, label: 'Entity Recognition', desc: 'Extracted characters, locations, and rules', status: 'complete', provider: 'Gemini' },
-        { id: 3, label: 'Relationship Mapping', desc: 'Prepared story context for continuity checks', status: 'complete', provider: 'Internal' },
-        { id: 4, label: 'Vector Embedding', desc: vectorIndexed ? 'Stored story chunks in ChromaDB' : 'Using local fallback until ChromaDB is running', status: vectorIndexed ? 'complete' : 'pending', provider: 'ChromaDB' },
-        { id: 5, label: 'Story Bible Generation', desc: 'Compiled structured knowledge', status: 'complete', provider: 'Internal' },
-      ]
+      const stageMap = new Map((uploadResult.processingStatus?.stages || []).map((stage) => [stage.key, stage]))
+      return pipelineSteps.map((step) => {
+        const status = stageMap.get(step.key)?.status
+        return {
+          ...step,
+          status: status === 'completed' ? 'complete' : status === 'failed' ? 'failed' : status === 'warning' ? 'warning' : 'complete',
+          desc: stageMap.get(step.key)?.message || step.desc,
+        }
+      })
     }
 
     if (!hasDraft && !hasFiles) {
@@ -174,20 +202,16 @@ export default function IngestionHub() {
 
     if (hasDraft && !hasFiles) {
       return [
-        { id: 1, label: 'Text Extraction', desc: 'Parse your draft content', status: 'complete', provider: 'Internal' },
-        { id: 2, label: 'Entity Recognition', desc: 'Detect characters, places, and themes', status: 'active', provider: 'Gemini' },
-        { id: 3, label: 'Relationship Mapping', desc: 'Build narrative connections', status: 'pending', provider: 'LangChain' },
-        { id: 4, label: 'Vector Embedding', desc: 'Embed narrative context', status: 'pending', provider: 'ChromaDB' },
-        { id: 5, label: 'Story Bible Generation', desc: 'Compile structured knowledge', status: 'pending', provider: 'Internal' },
+        { ...pipelineSteps[0], status: 'complete' },
+        { ...pipelineSteps[1], status: 'active' },
+        ...pipelineSteps.slice(2),
       ]
     }
 
     return [
-      { id: 1, label: 'Text Extraction', desc: 'Parse raw manuscript files', status: 'complete', provider: 'Internal' },
-      { id: 2, label: 'Entity Recognition', desc: 'Extract characters, locations, objects', status: 'complete', provider: 'Gemini' },
-      { id: 3, label: 'Relationship Mapping', desc: 'Build entity connections', status: 'active', provider: 'LangChain' },
-      { id: 4, label: 'Vector Embedding', desc: 'Store in ChromaDB', status: 'pending', provider: 'ChromaDB' },
-      { id: 5, label: 'Story Bible Generation', desc: 'Compile structured knowledge', status: 'pending', provider: 'Internal' },
+      { ...pipelineSteps[0], status: 'complete' },
+      { ...pipelineSteps[1], status: 'active' },
+      ...pipelineSteps.slice(2),
     ]
   }
 
@@ -220,7 +244,6 @@ export default function IngestionHub() {
     readTextFiles(acceptedFiles)
     setProcessed(false)
     setProcessError('')
-    setLatestUpload(null)
   }
 
   const handleDrop = (e) => {
@@ -235,13 +258,28 @@ export default function IngestionHub() {
     addFiles(files)
   }
 
-  const handleProcess = async () => {
-    const sourceText = getSourceText()
+  const handleProcess = async (overrideText = '') => {
+    const sourceText = normalizeText(overrideText) || getSourceText()
     if (!sourceText) return
 
     setProcessing(true)
     setProcessed(false)
     setProcessError('')
+    const pendingRecord = {
+      id: `processing-${Date.now()}`,
+      title: sourceText.slice(0, 80) || 'Untitled Story',
+      storyContent: sourceText,
+      generatedAt: new Date().toISOString(),
+      processingStatus: {
+        status: 'processing',
+        stages: pipelineSteps.map((step, index) => ({
+          key: step.key,
+          label: step.label,
+          status: index === 0 ? 'completed' : index === 1 ? 'processing' : 'pending',
+        })),
+      },
+    }
+    setUploadHistory(saveStoryUploadHistoryRecord(pendingRecord))
 
     try {
       const uploadResult = await uploadStory({
@@ -256,13 +294,52 @@ export default function IngestionHub() {
         storyContent: sourceText,
         uploadResult,
       })
+      deleteStoryUploadRecord(pendingRecord.id)
+      setUploadHistory(loadStoryUploadHistory())
       setLatestUpload(uploadRecord)
       setProcessing(false)
       setProcessed(true)
-      navigate('/story-bible')
     } catch (error) {
       setProcessing(false)
+      const failedRecord = {
+        ...pendingRecord,
+        processingStatus: {
+          status: 'failed',
+          stages: pipelineSteps.map((step, index) => ({
+            key: step.key,
+            label: step.label,
+            status: index === 0 ? 'completed' : index === 1 ? 'failed' : 'pending',
+            message: index === 1 ? error.message || 'Processing failed.' : '',
+          })),
+        },
+      }
+      setUploadHistory(saveStoryUploadHistoryRecord(failedRecord))
       setProcessError(error.message || 'Unable to generate Story Bible.')
+    }
+  }
+
+  const handleViewStory = (record) => {
+    setLatestUpload(record)
+    setStoryDraft(record.storyContent || '')
+    if (record.uploadResult?.storyBible) {
+      saveLatestStoryBible({
+        storyContent: record.storyContent || '',
+        storyBible: record.uploadResult.storyBible,
+      })
+      navigate('/story-bible')
+    }
+  }
+
+  const handleReprocessStory = async (record) => {
+    setStoryDraft(record.storyContent || '')
+    setLatestUpload(record)
+    await handleProcess(record.storyContent || '')
+  }
+
+  const handleDeleteStory = (record) => {
+    setUploadHistory(deleteStoryUploadRecord(record.id))
+    if (latestUpload?.id === record.id) {
+      setLatestUpload(loadLatestStoryUpload())
     }
   }
 
@@ -284,6 +361,7 @@ export default function IngestionHub() {
         storyContent,
         uploadResult,
       })
+      setUploadHistory(loadStoryUploadHistory())
       saveContinuityCheck(demoResult.continuity)
       localStorage.setItem('taleforge.demo.latest', JSON.stringify({
         demoStory: demoResult.demoStory,
@@ -414,7 +492,6 @@ export default function IngestionHub() {
                 setStoryDraft(e.target.value)
                 setProcessed(false)
                 setProcessError('')
-                setLatestUpload(null)
               }}
               placeholder="Start writing your story idea here..."
               className="min-h-[180px] w-full rounded-3xl border border-white/10 bg-surface-container/80 p-4 text-sm font-sans text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-colors"
@@ -429,7 +506,6 @@ export default function IngestionHub() {
                   setStoryDraft('')
                   setProcessed(false)
                   setProcessError('')
-                  setLatestUpload(null)
                 }}
                 disabled={!normalizeText(storyDraft)}
                 className="self-start rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -442,7 +518,7 @@ export default function IngestionHub() {
           {/* Pipeline */}
           <section>
             <h2 className="font-sora text-xl font-semibold text-on-surface mb-4">Processing Pipeline</h2>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-8 gap-3">
               {pipelineStepsDynamic.map((step, i) => (
                 <div key={step.id} className={`glass-panel rounded-xl p-4 relative ${
                   step.status === 'active' ? 'border-primary/30 shadow-[0_0_15px_rgba(157,80,187,0.15)]' : ''
@@ -452,6 +528,10 @@ export default function IngestionHub() {
                       <CheckCircle2 className="w-5 h-5 text-secondary" />
                     ) : step.status === 'active' ? (
                       <div className="w-5 h-5 rounded-full border-2 border-primary animate-spin border-t-transparent" />
+                    ) : step.status === 'failed' ? (
+                      <AlertTriangle className="w-5 h-5 text-error" />
+                    ) : step.status === 'warning' ? (
+                      <AlertTriangle className="w-5 h-5 text-primary" />
                     ) : (
                       <Circle className="w-5 h-5 text-on-surface-variant/30" />
                     )}
@@ -459,12 +539,115 @@ export default function IngestionHub() {
                   </div>
                   <div className="font-sora text-sm font-semibold text-on-surface mb-1">{step.label}</div>
                   <div className="font-mono text-[11px] text-on-surface-variant">{step.desc}</div>
-                  {i < pipelineSteps.length - 1 && (
+                  {i < pipelineStepsDynamic.length - 1 && (
                     <ArrowRight className="hidden md:block absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant/30 z-10" />
                   )}
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="glass-panel rounded-xl p-6 border border-white/10 bg-surface/70">
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="font-sora text-xl font-semibold text-on-surface">Uploaded Stories</h2>
+                <p className="font-mono text-sm text-on-surface-variant">
+                  Last 10 uploads stay here while TaleForge syncs the Story Bible, graph, continuity, research, and scene engines.
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-on-surface-variant">
+                {uploadHistory.length} Cached
+              </span>
+            </div>
+
+            {uploadHistory.length ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {uploadHistory.map((record) => {
+                  const status = record.processingStatus?.status || 'completed'
+                  const stages = record.processingStatus?.stages || []
+                  const badgeClass = status === 'failed'
+                    ? 'border-error/30 bg-error/10 text-error'
+                    : status === 'processing'
+                      ? 'border-primary/30 bg-primary/10 text-primary'
+                      : 'border-secondary/30 bg-secondary/10 text-secondary'
+
+                  return (
+                    <article key={record.id} className="rounded-xl border border-white/10 bg-surface-container-lowest/50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-sora text-base font-semibold text-on-surface">
+                            {record.title || record.uploadResult?.story?.title || 'Untitled Story'}
+                          </h3>
+                          <p className="mt-1 font-mono text-[10px] text-on-surface-variant">
+                            {record.generatedAt ? new Date(record.generatedAt).toLocaleString() : 'Just now'}
+                          </p>
+                        </div>
+                        <span className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest ${badgeClass}`}>
+                          {status === 'completed_with_warnings' ? 'Completed' : status}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {pipelineSteps.map((step) => {
+                          const stage = stages.find((item) => item.key === step.key)
+                          const stageStatus = stage?.status || 'pending'
+                          return (
+                            <div key={`${record.id}-${step.key}`} className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
+                              {stageStatus === 'completed' ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-secondary" />
+                              ) : stageStatus === 'failed' ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-error" />
+                              ) : stageStatus === 'warning' ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-primary" />
+                              ) : stageStatus === 'processing' ? (
+                                <div className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                              ) : (
+                                <Circle className="h-3.5 w-3.5 text-on-surface-variant/30" />
+                              )}
+                              <span className="font-mono text-[10px] text-on-surface-variant">{step.label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleViewStory(record)}
+                          className="rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-secondary hover:bg-secondary/20 flex items-center gap-2"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View Story
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReprocessStory(record)}
+                          disabled={processing}
+                          className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20 disabled:opacity-40 flex items-center gap-2"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Reprocess
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStory(record)}
+                          className="rounded-lg border border-error/30 bg-error/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-error hover:bg-error/20 flex items-center gap-2"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-surface-container-lowest/40 p-6 text-center">
+                <p className="font-inter text-sm text-on-surface-variant">
+                  Uploaded stories will remain here after processing.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* Analysis + Health */}
@@ -488,7 +671,7 @@ export default function IngestionHub() {
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={handleProcess}
+                  onClick={() => handleProcess()}
                   disabled={!isReadyToProcess || processing}
                   className="flex-1 py-3 bg-gradient-to-r from-primary-container to-primary/80 text-white font-mono text-sm font-medium rounded-lg border border-primary/20 hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(157,80,187,0.2)]"
                 >
